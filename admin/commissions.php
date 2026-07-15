@@ -1,0 +1,196 @@
+<?php
+require_once __DIR__ . '/../config/database.php';
+$pageTitle = 'Commissions';
+
+// Manual commission add
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add') {
+    $memberId = (int) ($_POST['member_id'] ?? 0);
+    $type = $_POST['type'] ?? 'other';
+    $amount = (float) ($_POST['amount'] ?? 0);
+    $description = trim($_POST['description'] ?? '');
+    $creditWallet = isset($_POST['credit_wallet']);
+
+    if ($memberId && $amount > 0 && in_array($type, ['binary', 'referral', 'matching', 'level', 'other'], true)) {
+        $status = $creditWallet ? 'paid' : 'pending';
+        $pdo->prepare('INSERT INTO commissions (member_id, type, amount, description, status) VALUES (?,?,?,?,?)')
+            ->execute([$memberId, $type, $amount, $description, $status]);
+        if ($creditWallet) {
+            $pdo->prepare('UPDATE members SET wallet_balance = wallet_balance + ?, total_earnings = total_earnings + ? WHERE id = ?')
+                ->execute([$amount, $amount, $memberId]);
+        }
+        log_activity('commission_add', "Added $amount commission to member #$memberId");
+        flash('success', 'Commission added.');
+    } else {
+        flash('error', 'Invalid commission data.');
+    }
+    header('Location: commissions.php');
+    exit;
+}
+
+// Mark paid
+if (isset($_GET['pay'])) {
+    $id = (int) $_GET['pay'];
+    $stmt = $pdo->prepare('SELECT * FROM commissions WHERE id = ? AND status = ?');
+    $stmt->execute([$id, 'pending']);
+    $c = $stmt->fetch();
+    if ($c) {
+        $pdo->prepare("UPDATE commissions SET status = 'paid' WHERE id = ?")->execute([$id]);
+        $pdo->prepare('UPDATE members SET wallet_balance = wallet_balance + ?, total_earnings = total_earnings + ? WHERE id = ?')
+            ->execute([(float)$c['amount'], (float)$c['amount'], (int)$c['member_id']]);
+        flash('success', 'Commission marked as paid and credited to wallet.');
+    }
+    header('Location: commissions.php');
+    exit;
+}
+
+$typeFilter = $_GET['type'] ?? '';
+$statusFilter = $_GET['status'] ?? '';
+$page = max(1, (int) ($_GET['page'] ?? 1));
+$perPage = 20;
+$offset = ($page - 1) * $perPage;
+
+$where = ['1=1'];
+$params = [];
+if (in_array($typeFilter, ['binary', 'referral', 'matching', 'level', 'other'], true)) {
+    $where[] = 'c.type = ?';
+    $params[] = $typeFilter;
+}
+if (in_array($statusFilter, ['pending', 'paid', 'cancelled'], true)) {
+    $where[] = 'c.status = ?';
+    $params[] = $statusFilter;
+}
+$whereSql = implode(' AND ', $where);
+
+$countStmt = $pdo->prepare("SELECT COUNT(*) FROM commissions c WHERE $whereSql");
+$countStmt->execute($params);
+$total = (int) $countStmt->fetchColumn();
+$totalPages = max(1, (int) ceil($total / $perPage));
+
+$stmt = $pdo->prepare("
+    SELECT c.*, m.full_name, m.member_id AS mid
+    FROM commissions c
+    JOIN members m ON m.id = c.member_id
+    WHERE $whereSql
+    ORDER BY c.id DESC
+    LIMIT $perPage OFFSET $offset
+");
+$stmt->execute($params);
+$rows = $stmt->fetchAll();
+
+$members = $pdo->query("SELECT id, member_id, full_name FROM members WHERE status = 'active' ORDER BY id")->fetchAll();
+$sumPaid = (float) $pdo->query("SELECT COALESCE(SUM(amount),0) FROM commissions WHERE status = 'paid'")->fetchColumn();
+$sumPending = (float) $pdo->query("SELECT COALESCE(SUM(amount),0) FROM commissions WHERE status = 'pending'")->fetchColumn();
+
+require_once __DIR__ . '/../includes/header.php';
+?>
+
+<div class="stats-grid">
+    <div class="stat-card accent"><div class="label">Paid Total</div><div class="value"><?= currency($sumPaid) ?></div></div>
+    <div class="stat-card"><div class="label">Pending Total</div><div class="value"><?= currency($sumPending) ?></div></div>
+</div>
+
+<div class="panel">
+    <div class="panel-header"><h2>Add Commission</h2></div>
+    <div class="panel-body">
+        <form method="post">
+            <input type="hidden" name="action" value="add">
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Member *</label>
+                    <select name="member_id" required>
+                        <option value="">— Select —</option>
+                        <?php foreach ($members as $m): ?>
+                        <option value="<?= (int)$m['id'] ?>"><?= e($m['member_id'] . ' — ' . $m['full_name']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Type</label>
+                    <select name="type">
+                        <?php foreach (['binary','referral','matching','level','other'] as $t): ?>
+                        <option value="<?= $t ?>"><?= ucfirst($t) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Amount *</label>
+                    <input type="number" step="0.01" name="amount" required>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <input type="text" name="description">
+                </div>
+            </div>
+            <label style="display:flex;align-items:center;gap:0.5rem;margin-top:0.75rem;font-size:0.9rem">
+                <input type="checkbox" name="credit_wallet" value="1" checked> Credit to wallet immediately
+            </label>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Add Commission</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="panel">
+    <div class="panel-header"><h2>Commission List (<?= $total ?>)</h2></div>
+    <div class="panel-body">
+        <form class="filters" method="get">
+            <div class="form-group">
+                <label>Type</label>
+                <select name="type">
+                    <option value="">All</option>
+                    <?php foreach (['binary','referral','matching','level','other'] as $t): ?>
+                    <option value="<?= $t ?>" <?= $typeFilter === $t ? 'selected' : '' ?>><?= ucfirst($t) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Status</label>
+                <select name="status">
+                    <option value="">All</option>
+                    <?php foreach (['pending','paid','cancelled'] as $s): ?>
+                    <option value="<?= $s ?>" <?= $statusFilter === $s ? 'selected' : '' ?>><?= ucfirst($s) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">Filter</button>
+        </form>
+    </div>
+    <div class="table-wrap">
+        <table class="data">
+            <thead>
+                <tr><th>ID</th><th>Member</th><th>Type</th><th>Amount</th><th>Description</th><th>Status</th><th>Date</th><th></th></tr>
+            </thead>
+            <tbody>
+            <?php if (!$rows): ?>
+                <tr><td colspan="8">No commissions found.</td></tr>
+            <?php else: foreach ($rows as $r): ?>
+                <tr>
+                    <td>#<?= (int)$r['id'] ?></td>
+                    <td><?= e($r['full_name']) ?><br><small><?= e($r['mid']) ?></small></td>
+                    <td><?= e(ucfirst($r['type'])) ?></td>
+                    <td><?= currency((float)$r['amount']) ?></td>
+                    <td><?= e($r['description'] ?? '') ?></td>
+                    <td><span class="badge badge-<?= e($r['status']) ?>"><?= e($r['status']) ?></span></td>
+                    <td><?= date('d M Y H:i', strtotime($r['created_at'])) ?></td>
+                    <td>
+                        <?php if ($r['status'] === 'pending'): ?>
+                        <a href="?pay=<?= (int)$r['id'] ?>" class="btn btn-success btn-sm" data-confirm="Mark as paid and credit wallet?">Pay</a>
+                        <?php endif; ?>
+                    </td>
+                </tr>
+            <?php endforeach; endif; ?>
+            </tbody>
+        </table>
+    </div>
+    <?php if ($totalPages > 1): ?>
+    <div class="pagination">
+        <?php for ($i = 1; $i <= $totalPages; $i++): ?>
+            <?php if ($i === $page): ?><span class="current"><?= $i ?></span>
+            <?php else: ?><a href="?page=<?= $i ?>&type=<?= urlencode($typeFilter) ?>&status=<?= urlencode($statusFilter) ?>"><?= $i ?></a><?php endif; ?>
+        <?php endfor; ?>
+    </div>
+    <?php endif; ?>
+</div>
+
+<?php require_once __DIR__ . '/../includes/footer.php'; ?>
