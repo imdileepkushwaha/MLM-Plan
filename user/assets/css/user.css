@@ -1214,210 +1214,228 @@ img { max-width: 100%; display: block; }
 
 .up-overlay.show { display: block; }
 
-/* Auth — modern login */
+/* Auth — member gate login (editorial layout) */
 .ulog-body {
     margin: 0;
     min-height: 100vh;
-    font-family: 'Outfit', 'Plus Jakarta Sans', sans-serif;
-    color: #1c2434;
-    background: #0b1220;
+    font-family: 'Figtree', 'Plus Jakarta Sans', sans-serif;
+    color: #1a1d27;
+    background: #0d1324;
 }
 
 .ulog {
-    --ulog-ink: #0f172a;
-    --ulog-muted: #64748b;
-    --ulog-line: #e2e8f0;
-    --ulog-gold: #d4a017;
-    --ulog-gold-soft: #f5d76e;
-    --ulog-surface: #f7f8fa;
-    min-height: 100vh;
-    display: grid;
-    grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
-}
-
-.ulog-hero {
+    --ulog-ink: #16213e;
+    --ulog-muted: #7a849c;
+    --ulog-line: #d5dbeb;
+    --ulog-accent: #e9c46a;
+    --ulog-accent-deep: #daa520;
+    --ulog-accent-soft: #f0d78a;
+    --ulog-accent-ink: #16213e;
+    --ulog-sheet: #f7f8fc;
+    --ulog-blue: #c9a227;
     position: relative;
+    min-height: 100vh;
     overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    padding: clamp(1.75rem, 4vw, 3rem);
-    color: #f8fafc;
+    display: grid;
+    grid-template-columns: minmax(240px, 340px) minmax(0, 1fr);
     background:
-        linear-gradient(145deg, rgba(11, 18, 32, 0.2) 0%, rgba(11, 18, 32, 0.55) 55%, rgba(11, 18, 32, 0.75) 100%),
-        linear-gradient(160deg, #121a2e 0%, #1a2744 42%, #243552 78%, #1c2a3a 100%);
+        radial-gradient(ellipse 50% 40% at 12% 18%, rgba(233, 196, 106, 0.14), transparent 60%),
+        radial-gradient(ellipse 45% 35% at 88% 78%, rgba(22, 33, 62, 0.55), transparent 55%),
+        linear-gradient(145deg, #0b1020 0%, #16213e 42%, #10182c 100%);
 }
 
-.ulog-hero-bg {
+.ulog-stage {
     position: absolute;
     inset: 0;
     pointer-events: none;
-    color: var(--ulog-gold-soft);
+    z-index: 0;
 }
 
-.ulog-orb {
+.ulog-blade {
     position: absolute;
-    border-radius: 50%;
-    filter: blur(40px);
-    opacity: 0.45;
-    animation: ulog-float 12s ease-in-out infinite;
+    background: linear-gradient(135deg, rgba(233, 196, 106, 0.28), rgba(218, 165, 32, 0.1));
+    transform-origin: center;
+    animation: ulog-blade 16s ease-in-out infinite;
 }
 
-.ulog-orb-a {
-    width: 280px;
-    height: 280px;
-    top: -60px;
-    right: -40px;
-    background: radial-gradient(circle, rgba(212, 160, 23, 0.55), transparent 70%);
-}
-
-.ulog-orb-b {
-    width: 320px;
-    height: 320px;
-    bottom: -80px;
-    left: -60px;
-    background: radial-gradient(circle, rgba(56, 119, 184, 0.4), transparent 70%);
-    animation-delay: -4s;
-}
-
-.ulog-mesh {
-    position: absolute;
-    inset: 8% 6% auto;
-    width: min(92%, 560px);
-    height: auto;
+.ulog-blade-a {
+    width: 55vw;
+    height: 38vh;
+    top: -12%;
+    right: -8%;
+    clip-path: polygon(18% 0, 100% 0, 100% 72%, 0 100%);
     opacity: 0.55;
-    animation: ulog-mesh-in 1.1s ease both;
 }
 
-.ulog-node {
+.ulog-blade-b {
+    width: 42vw;
+    height: 48vh;
+    bottom: -18%;
+    left: -10%;
+    clip-path: polygon(0 28%, 100% 0, 82% 100%, 0 100%);
+    background: linear-gradient(160deg, rgba(218, 165, 32, 0.16), rgba(22, 33, 62, 0.35));
+    animation-delay: -6s;
     opacity: 0.7;
 }
 
-.ulog-node-core {
-    fill: var(--ulog-gold);
-    opacity: 1;
-    animation: ulog-pulse 2.8s ease-in-out infinite;
+.ulog-blade-c {
+    width: 28vw;
+    height: 28vw;
+    top: 38%;
+    left: 42%;
+    clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+    background: rgba(255, 255, 255, 0.04);
+    animation-delay: -3s;
 }
 
-.ulog-hero-content {
+.ulog-dots {
+    position: absolute;
+    inset: 0;
+    opacity: 0.22;
+    background-image: radial-gradient(rgba(247, 248, 251, 0.55) 1px, transparent 1px);
+    background-size: 22px 22px;
+    mask-image: radial-gradient(ellipse 70% 60% at 30% 40%, #000 10%, transparent 70%);
+}
+
+.ulog-rail {
     position: relative;
     z-index: 1;
-    margin-top: auto;
+    order: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 1.5rem;
+    padding: clamp(1.5rem, 3vw, 2.5rem);
+    border-right: 1px solid rgba(247, 248, 251, 0.08);
+    color: rgba(247, 248, 251, 0.7);
+    animation: ulog-fade 0.9s 0.2s ease both;
+}
+
+.ulog-tree {
+    width: min(100%, 220px);
+    height: auto;
+    align-self: center;
     margin-bottom: auto;
-    max-width: 34rem;
-    padding-top: 2rem;
-    animation: ulog-rise 0.85s ease both;
+    margin-top: 12vh;
+    color: var(--ulog-accent);
+}
+
+.ulog-tree-line {
+    stroke: currentColor;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: 0.55;
+    stroke-dasharray: 420;
+    stroke-dashoffset: 420;
+    animation: ulog-draw 1.6s 0.35s ease forwards;
+}
+
+.ulog-tree-dot {
+    fill: currentColor;
+    opacity: 0;
+    animation: ulog-dot 0.45s ease forwards;
+}
+
+.ulog-tree-dot:nth-child(2) { animation-delay: 0.55s; }
+.ulog-tree-dot:nth-child(3) { animation-delay: 0.7s; }
+.ulog-tree-dot:nth-child(4) { animation-delay: 0.85s; }
+.ulog-tree-dot:nth-child(5) { animation-delay: 1s; }
+.ulog-tree-dot:nth-child(6) { animation-delay: 1.1s; }
+.ulog-tree-dot:nth-child(7) { animation-delay: 1.2s; }
+.ulog-tree-dot:nth-child(8) { animation-delay: 1.3s; }
+.ulog-tree-dot:nth-child(9) { animation-delay: 1.35s; }
+.ulog-tree-dot:nth-child(10) { animation-delay: 1.4s; }
+.ulog-tree-dot:nth-child(11) { animation-delay: 1.45s; }
+
+.ulog-tree-dot.is-core {
+    fill: #fff;
+}
+
+.ulog-rail-copy {
+    margin: 0;
+    font-family: 'Unbounded', 'Figtree', sans-serif;
+    font-size: clamp(1.15rem, 2vw, 1.45rem);
+    font-weight: 700;
+    line-height: 1.25;
+    letter-spacing: -0.03em;
+    color: #f7f8fb;
+}
+
+.ulog-main {
+    position: relative;
+    z-index: 2;
+    order: 2;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    width: min(100%, 460px);
+    margin: 0 clamp(1.5rem, 8vw, 7rem) 0 auto;
+    padding: clamp(1.75rem, 4vw, 3rem) clamp(1.25rem, 3vw, 2rem);
+    animation: ulog-rise 0.75s ease both;
+}
+
+.ulog-kicker {
+    margin: 0 0 0.85rem;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ulog-accent);
 }
 
 .ulog-brand {
-    margin: 0 0 1.1rem;
-    font-family: 'Sora', 'Outfit', sans-serif;
-    font-size: clamp(2rem, 4.5vw, 3.35rem);
+    margin: 0;
+    font-family: 'Unbounded', 'Figtree', sans-serif;
+    font-size: clamp(2.1rem, 5.5vw, 3.4rem);
     font-weight: 800;
     letter-spacing: -0.045em;
-    line-height: 1.05;
+    line-height: 1.02;
     color: #fff;
     text-wrap: balance;
 }
 
-.ulog-brand::after {
-    content: '';
-    display: block;
-    width: 3.2rem;
-    height: 3px;
-    margin-top: 0.9rem;
-    border-radius: 2px;
-    background: linear-gradient(90deg, var(--ulog-gold), var(--ulog-gold-soft));
-    animation: ulog-bar 0.9s 0.25s ease both;
-}
-
-.ulog-hero-content h1 {
-    margin: 0;
-    font-family: 'Outfit', sans-serif;
-    font-size: clamp(1.35rem, 2.4vw, 1.85rem);
+.ulog-title {
+    margin: 1.1rem 0 0;
+    max-width: 18ch;
+    font-family: 'Figtree', sans-serif;
+    font-size: clamp(1.2rem, 2.4vw, 1.55rem);
     font-weight: 600;
-    line-height: 1.3;
+    line-height: 1.35;
     letter-spacing: -0.02em;
-    color: rgba(248, 250, 252, 0.92);
+    color: rgba(247, 248, 251, 0.88);
 }
 
-.ulog-tagline {
-    margin: 0.85rem 0 0;
-    max-width: 28rem;
-    font-size: 1rem;
-    line-height: 1.55;
-    color: rgba(226, 232, 240, 0.78);
+.ulog-lead {
+    margin: 0.65rem 0 0;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    color: rgba(247, 248, 251, 0.58);
 }
 
-.ulog-hero-foot {
-    position: relative;
-    z-index: 1;
-    margin: 0;
-    font-size: 0.78rem;
-    color: rgba(226, 232, 240, 0.5);
-}
-
-.ulog-panel {
-    display: grid;
-    place-items: center;
-    padding: clamp(1.5rem, 4vw, 2.5rem);
-    background:
-        radial-gradient(ellipse 60% 40% at 100% 0%, rgba(212, 160, 23, 0.08), transparent 55%),
-        linear-gradient(180deg, #ffffff 0%, var(--ulog-surface) 100%);
-}
-
-.ulog-panel-inner {
-    width: 100%;
-    max-width: 400px;
-    animation: ulog-rise 0.75s 0.12s ease both;
-}
-
-.ulog-head {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.85rem;
-    margin-bottom: 1.5rem;
-}
-
-.ulog-mark {
-    flex-shrink: 0;
-    width: 44px;
-    height: 44px;
-    display: grid;
-    place-items: center;
-    border-radius: 12px;
-    background: linear-gradient(145deg, #1a2540, #0f172a);
-    color: var(--ulog-gold);
-}
-
-.ulog-mark svg { width: 20px; height: 20px; }
-
-.ulog-head h2 {
-    margin: 0;
-    font-family: 'Sora', 'Outfit', sans-serif;
-    font-size: 1.45rem;
-    font-weight: 700;
-    letter-spacing: -0.03em;
-    color: var(--ulog-ink);
-}
-
-.ulog-head p {
-    margin: 0.25rem 0 0;
-    font-size: 0.9rem;
-    color: var(--ulog-muted);
-    line-height: 1.4;
+.ulog-main .up-alert {
+    margin-top: 1.15rem;
 }
 
 .ulog-form {
+    margin-top: 1.6rem;
+    padding: 1.35rem 1.25rem 1.4rem;
+    background: var(--ulog-sheet);
+    color: var(--ulog-ink);
+    clip-path: polygon(0 0, calc(100% - 22px) 0, 100% 22px, 100% 100%, 0 100%);
     display: grid;
-    gap: 1rem;
+    gap: 1.05rem;
+    box-shadow: 12px 16px 0 rgba(233, 196, 106, 0.28);
 }
 
-.ulog-form .up-field label {
-    font-size: 0.78rem;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    color: #475569;
+.ulog-field label {
+    display: block;
+    margin-bottom: 0.4rem;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #5c6780;
 }
 
 .ulog-label-row {
@@ -1425,144 +1443,145 @@ img { max-width: 100%; display: block; }
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
-    margin-bottom: 0.35rem;
 }
 
-.ulog-label-row label { margin: 0; }
+.ulog-label-row label { margin-bottom: 0.4rem; }
 
 .ulog-forgot {
     font-size: 0.78rem;
     font-weight: 700;
-    color: #c9a227;
+    color: var(--ulog-blue);
     text-decoration: none;
-    white-space: nowrap;
 }
 
 .ulog-forgot:hover { text-decoration: underline; }
 
-.upw-dev {
-    margin-top: 0.85rem;
-    padding: 0.9rem 1rem;
-    border-radius: 12px;
-    background: #fffbeb;
-    border: 1px solid #fde68a;
-    text-align: left;
-}
-
-.upw-dev strong {
-    display: block;
-    font-size: 0.78rem;
-    font-weight: 800;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: #92400e;
-    margin-bottom: 0.35rem;
-}
-
-.upw-dev p {
-    margin: 0 0 0.4rem;
-    font-size: 0.82rem;
-    color: #78350f;
-}
-
-.upw-dev a {
-    display: block;
-    word-break: break-all;
-    font-size: 0.78rem;
+.ulog-field input {
+    width: 100%;
+    box-sizing: border-box;
+    border: 0;
+    border-bottom: 2px solid #cfd5e2;
+    border-radius: 0;
+    background: transparent;
+    padding: 0.55rem 0.15rem 0.65rem;
+    font: inherit;
+    font-size: 1rem;
     font-weight: 600;
-    color: #2152ff;
-    line-height: 1.4;
+    color: var(--ulog-ink);
+    transition: border-color 0.18s;
 }
 
-.ulog-form .up-field input {
-    border-radius: 12px;
-    border-color: var(--ulog-line);
-    background: #fff;
-    padding: 0.78rem 0.95rem;
-    font-size: 0.95rem;
-    transition: border-color 0.18s, box-shadow 0.18s;
+.ulog-field input:focus {
+    outline: none;
+    border-bottom-color: var(--ulog-accent);
 }
 
-.ulog-form .up-field input:focus {
-    border-color: #c9a227;
-    box-shadow: 0 0 0 3px rgba(212, 160, 23, 0.18);
+.ulog-field .up-password-wrap input {
+    padding-right: 2.6rem;
+}
+
+.ulog-form .up-eye {
+    color: #8b93a7;
 }
 
 .ulog-submit {
-    margin-top: 0.35rem;
+    margin-top: 0.25rem;
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    gap: 0.55rem;
+    justify-content: space-between;
+    gap: 0.75rem;
     width: 100%;
-    padding: 0.9rem 1.15rem;
+    padding: 0.95rem 1.1rem;
     border: 0;
-    border-radius: 12px;
+    border-radius: 0;
     cursor: pointer;
     font: inherit;
     font-size: 0.95rem;
-    font-weight: 700;
+    font-weight: 800;
     letter-spacing: -0.01em;
-    color: #0f172a;
-    background: linear-gradient(135deg, #f5d76e 0%, #d4a017 55%, #b8860b 100%);
+    color: var(--ulog-accent-ink);
+    background: linear-gradient(90deg, #e9c46a 0%, #daa520 100%);
     transition: transform 0.18s ease, filter 0.18s ease;
 }
 
-.ulog-submit svg {
-    width: 18px;
-    height: 18px;
+.ulog-submit-arrow {
+    font-size: 1.2rem;
+    line-height: 1;
     transition: transform 0.18s ease;
 }
 
 .ulog-submit:hover {
-    filter: brightness(1.04);
+    filter: brightness(1.05);
     transform: translateY(-1px);
 }
 
-.ulog-submit:hover svg { transform: translateX(3px); }
-
-.ulog-submit:active { transform: translateY(0); }
-
-.ulog-panel-foot {
-    margin: 1.35rem 0 0;
-    text-align: center;
-    font-size: 0.8rem;
-    color: var(--ulog-muted);
+.ulog-submit:hover .ulog-submit-arrow {
+    transform: translateX(4px);
 }
 
-.ulog-panel-foot.soft { margin-top: 0.45rem; opacity: 0.9; }
+.ulog-submit:active { transform: none; }
 
-.ulog-link {
-    color: #c9a227;
+.ulog-submit:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+}
+
+a.ulog-submit {
+    text-decoration: none;
+    box-sizing: border-box;
+}
+
+.ulog-form .up-alert { margin: 0; }
+.ulog-form .upw-dev { margin-top: 0; }
+
+.ulog-foot {
+    margin-top: 1.35rem;
+    display: grid;
+    gap: 0.45rem;
+}
+
+.ulog-foot p {
+    margin: 0;
+    font-size: 0.88rem;
+    color: rgba(247, 248, 251, 0.62);
+}
+
+.ulog-foot a {
+    color: var(--ulog-accent);
     font-weight: 700;
     text-decoration: none;
 }
 
-.ulog-link:hover { text-decoration: underline; }
+.ulog-foot a:hover { text-decoration: underline; }
+
+.ulog-copy {
+    font-size: 0.75rem !important;
+    color: rgba(247, 248, 251, 0.38) !important;
+}
 
 @keyframes ulog-rise {
-    from { opacity: 0; transform: translateY(14px); }
+    from { opacity: 0; transform: translateY(18px); }
     to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes ulog-mesh-in {
-    from { opacity: 0; transform: scale(0.96) translateY(10px); }
-    to { opacity: 0.55; transform: scale(1) translateY(0); }
+@keyframes ulog-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 
-@keyframes ulog-bar {
-    from { width: 0; opacity: 0; }
-    to { width: 3.2rem; opacity: 1; }
+@keyframes ulog-blade {
+    0%, 100% { transform: translate(0, 0) rotate(0deg); }
+    50% { transform: translate(-10px, 12px) rotate(0.6deg); }
 }
 
-@keyframes ulog-float {
-    0%, 100% { transform: translate(0, 0); }
-    50% { transform: translate(-12px, 16px); }
+@keyframes ulog-draw {
+    to { stroke-dashoffset: 0; }
 }
 
-@keyframes ulog-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.55; }
+@keyframes ulog-dot {
+    from { opacity: 0; transform: scale(0.5); }
+    to { opacity: 0.9; transform: scale(1); }
 }
 
 @media (max-width: 900px) {
@@ -1571,42 +1590,46 @@ img { max-width: 100%; display: block; }
         grid-template-rows: auto 1fr;
     }
 
-    .ulog-hero {
-        min-height: 42vh;
-        padding: 1.5rem 1.35rem 1.75rem;
+    .ulog-rail {
+        order: 1;
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 1.25rem 1.25rem 0.5rem;
+        border-right: 0;
+        border-bottom: 1px solid rgba(247, 248, 251, 0.08);
+        min-height: auto;
     }
 
-    .ulog-mesh {
-        inset: auto -8% -18% auto;
-        width: 70%;
-        opacity: 0.35;
-    }
-
-    .ulog-hero-content {
+    .ulog-tree {
+        width: 88px;
         margin: 0;
-        padding-top: 1rem;
-        max-width: none;
     }
 
-    .ulog-brand { font-size: clamp(1.75rem, 7vw, 2.4rem); }
-
-    .ulog-hero-content h1 { font-size: 1.15rem; }
-
-    .ulog-tagline { font-size: 0.9rem; }
-
-    .ulog-hero-foot { display: none; }
-
-    .ulog-panel {
-        place-items: start stretch;
-        padding: 1.5rem 1.25rem 2rem;
-        border-radius: 24px 24px 0 0;
-        margin-top: -1.25rem;
-        position: relative;
-        z-index: 2;
-        box-shadow: 0 -16px 40px rgba(15, 23, 42, 0.12);
+    .ulog-rail-copy {
+        font-size: 1rem;
+        text-align: right;
     }
+
+    .ulog-main {
+        order: 2;
+        width: 100%;
+        margin: 0;
+        padding: 1.35rem 1.2rem 2rem;
+        background: linear-gradient(180deg, transparent, rgba(13, 19, 36, 0.55) 18%);
+    }
+
+    .ulog-brand {
+        font-size: clamp(1.85rem, 9vw, 2.6rem);
+    }
+
+    .ulog-form {
+        box-shadow: 8px 10px 0 rgba(233, 196, 106, 0.24);
+    }
+
+    .ulog-blade-c { display: none; }
 }
-
 /* Legacy auth helpers still used by password eye / fields */
 .up-password-wrap { position: relative; }
 
