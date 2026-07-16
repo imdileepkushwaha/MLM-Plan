@@ -100,14 +100,16 @@ require_once __DIR__ . '/includes/header.php';
     <section class="ph-main">
         <div class="ph-form-card">
             <div class="ph-form-head">
-                <div>
-                    <span class="up-panel-kicker">My Profile</span>
-                    <h2>Profile Photo</h2>
-                    <p>Upload a new image or remove the current one anytime.</p>
+                <div class="up-panel-head-main">
+                    <span class="up-panel-head-ico" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                    </span>
+                    <div>
+                        <span class="up-panel-kicker">My Profile</span>
+                        <h2>Profile Photo</h2>
+                        <p>Upload a new image or remove the current one anytime.</p>
+                    </div>
                 </div>
-                <span class="up-panel-head-ico" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
-                </span>
             </div>
 
             <div class="ph-form-body">

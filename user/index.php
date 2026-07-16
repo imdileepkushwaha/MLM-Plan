@@ -72,11 +72,11 @@ $needsActivation = empty($user['package_id']);
     </article>
     <article class="up-stat g-green">
         <div class="up-stat-bg" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3"/><path d="M9 13c6.667 0 6.667-10 0-10"/></svg>
         </div>
         <div class="up-stat-inner">
             <span class="up-stat-ico" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3"/><path d="M9 13c6.667 0 6.667-10 0-10"/></svg>
             </span>
             <div class="up-stat-copy">
                 <div class="up-stat-label">Total Earnings</div>
@@ -126,14 +126,16 @@ $needsActivation = empty($user['package_id']);
 <div class="up-grid-2">
     <section class="up-card up-panel-card up-quick-panel">
         <div class="up-panel-head is-blue">
-            <div>
-                <span class="up-panel-kicker">Shortcuts</span>
-                <h2>Quick Navigation</h2>
-                <p>Jump to common account actions instantly.</p>
+            <div class="up-panel-head-main">
+                <span class="up-panel-head-ico" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                </span>
+                <div>
+                    <span class="up-panel-kicker">Shortcuts</span>
+                    <h2>Quick Navigation</h2>
+                    <p>Jump to common account actions instantly.</p>
+                </div>
             </div>
-            <span class="up-panel-head-ico" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-            </span>
         </div>
         <div class="up-quick">
             <a href="profile.php" class="up-q-tile c1">
@@ -156,8 +158,8 @@ $needsActivation = empty($user['package_id']);
                 <strong>Settings</strong>
                 <small>Preferences</small>
             </a>
-            <a href="index.php" class="up-q-tile c5">
-                <span class="up-quick-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></span>
+            <a href="income-summary.php" class="up-q-tile c5">
+                <span class="up-quick-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3"/><path d="M9 13c6.667 0 6.667-10 0-10"/></svg></span>
                 <strong>Earnings</strong>
                 <small>Income view</small>
             </a>
@@ -181,14 +183,16 @@ $needsActivation = empty($user['package_id']);
 
     <section class="up-card up-panel-card up-snap-panel">
         <div class="up-panel-head is-green">
-            <div>
-                <span class="up-panel-kicker">Live console</span>
-                <h2>Account Snapshot</h2>
-                <p>Live summary of your membership status.</p>
+            <div class="up-panel-head-main">
+                <span class="up-panel-head-ico" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                </span>
+                <div>
+                    <span class="up-panel-kicker">Live console</span>
+                    <h2>Account Snapshot</h2>
+                    <p>Live summary of your membership status.</p>
+                </div>
             </div>
-            <span class="up-panel-head-ico" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-            </span>
         </div>
         <div class="up-snap-body">
             <div class="up-snap-list">

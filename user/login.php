@@ -2,6 +2,7 @@
 require_once __DIR__ . '/includes/auth.php';
 
 if (!empty($_SESSION['user_id'])) {
+    session_enforce_idle('user', 'login.php');
     header('Location: index.php');
     exit;
 }
@@ -30,6 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['user_id'] = (int) $member['id'];
                 $_SESSION['user_name'] = $member['full_name'];
                 $_SESSION['user_code'] = $member['member_id'];
+                session_touch('user');
                 header('Location: index.php');
                 exit;
             }

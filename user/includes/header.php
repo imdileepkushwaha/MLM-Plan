@@ -28,13 +28,22 @@ $teamOpen = in_array($currentPage, $teamPages, true);
 $teamBadge = count($teamPages);
 $wdPages = ['withdrawal-fund', 'withdrawal-report'];
 $wdOpen = in_array($currentPage, $wdPages, true);
-$wdBadge = wd_pending_count($pdo, (int) $user['id']);
+$wdBadge = count($wdPages);
+$wdPendingBadge = wd_pending_count($pdo, (int) $user['id']);
+$incomePages = ['income-summary', 'income-binary', 'income-referral', 'income-matching', 'income-level', 'income-other'];
+$incomeOpen = in_array($currentPage, $incomePages, true);
+$incomeBadge = count($incomePages);
+$reportPages = ['transaction-report'];
+$reportOpen = in_array($currentPage, $reportPages, true);
+$reportBadge = count($reportPages);
 
 $icoDash = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>';
 $icoUser = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
 $icoKyc = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg>';
 $icoTeam = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>';
+$icoIncome = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3"/><path d="M9 13c6.667 0 6.667-10 0-10"/></svg>';
 $icoWd = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><circle cx="16" cy="15" r="1.5" fill="currentColor" stroke="none"/></svg>';
+$icoReports = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>';
 $icoLogout = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>';
 $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="6 9 12 15 18 9"/></svg>';
 ?>
@@ -128,20 +137,57 @@ $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="
             </div>
 
             <div class="up-nav-section">
+                <div class="up-nav-label">My Income</div>
+                <div class="up-nav-group<?= $incomeOpen ? ' is-open' : '' ?>" data-up-nav-group>
+                    <button type="button" class="up-nav-item up-nav-toggle<?= $incomeOpen ? ' is-active' : '' ?>" data-up-nav-toggle aria-expanded="<?= $incomeOpen ? 'true' : 'false' ?>">
+                        <span class="up-nav-ico"><?= $icoIncome ?></span>
+                        <span class="up-nav-text">My Income</span>
+                        <span class="up-nav-badge"><?= (int) $incomeBadge ?></span>
+                        <?= $chevron ?>
+                    </button>
+                    <div class="up-nav-sub" id="upNavSubIncome">
+                        <div class="up-nav-sub-inner">
+                            <a href="income-summary.php" class="up-nav-sublink<?= $currentPage === 'income-summary' ? ' is-active' : '' ?>">Income Summary</a>
+                            <a href="income-binary.php" class="up-nav-sublink<?= $currentPage === 'income-binary' ? ' is-active' : '' ?>">Binary Income</a>
+                            <a href="income-referral.php" class="up-nav-sublink<?= $currentPage === 'income-referral' ? ' is-active' : '' ?>">Referral Income</a>
+                            <a href="income-matching.php" class="up-nav-sublink<?= $currentPage === 'income-matching' ? ' is-active' : '' ?>">Matching Income</a>
+                            <a href="income-level.php" class="up-nav-sublink<?= $currentPage === 'income-level' ? ' is-active' : '' ?>">Level Income</a>
+                            <a href="income-other.php" class="up-nav-sublink<?= $currentPage === 'income-other' ? ' is-active' : '' ?>">Other Income</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="up-nav-section">
                 <div class="up-nav-label">Withdrawal</div>
                 <div class="up-nav-group<?= $wdOpen ? ' is-open' : '' ?>" data-up-nav-group>
                     <button type="button" class="up-nav-item up-nav-toggle<?= $wdOpen ? ' is-active' : '' ?>" data-up-nav-toggle aria-expanded="<?= $wdOpen ? 'true' : 'false' ?>">
                         <span class="up-nav-ico"><?= $icoWd ?></span>
                         <span class="up-nav-text">Withdrawal</span>
-                        <?php if ($wdBadge > 0): ?>
-                            <span class="up-nav-badge"><?= (int) $wdBadge ?></span>
-                        <?php endif; ?>
+                        <span class="up-nav-badge"><?= (int) ($wdPendingBadge > 0 ? $wdPendingBadge : $wdBadge) ?></span>
                         <?= $chevron ?>
                     </button>
                     <div class="up-nav-sub" id="upNavSubWithdrawal">
                         <div class="up-nav-sub-inner">
                             <a href="withdrawal-fund.php" class="up-nav-sublink<?= $currentPage === 'withdrawal-fund' ? ' is-active' : '' ?>">Withdrawal Fund</a>
                             <a href="withdrawal-report.php" class="up-nav-sublink<?= $currentPage === 'withdrawal-report' ? ' is-active' : '' ?>">Withdrawal Report</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="up-nav-section">
+                <div class="up-nav-label">Reports</div>
+                <div class="up-nav-group<?= $reportOpen ? ' is-open' : '' ?>" data-up-nav-group>
+                    <button type="button" class="up-nav-item up-nav-toggle<?= $reportOpen ? ' is-active' : '' ?>" data-up-nav-toggle aria-expanded="<?= $reportOpen ? 'true' : 'false' ?>">
+                        <span class="up-nav-ico"><?= $icoReports ?></span>
+                        <span class="up-nav-text">Reports</span>
+                        <span class="up-nav-badge"><?= (int) $reportBadge ?></span>
+                        <?= $chevron ?>
+                    </button>
+                    <div class="up-nav-sub" id="upNavSubReports">
+                        <div class="up-nav-sub-inner">
+                            <a href="transaction-report.php" class="up-nav-sublink<?= $currentPage === 'transaction-report' ? ' is-active' : '' ?>">Transaction Report</a>
                         </div>
                     </div>
                 </div>

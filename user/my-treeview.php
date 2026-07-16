@@ -75,10 +75,14 @@ if ($root && !empty($root['placement_id'])) {
 
 <section class="team-card ut-panel">
     <div class="team-banner is-gold">
-        <div>
-            <span class="team-banner-kicker">Visual binary</span>
-            <h2>Tree Board</h2>
-            <p><?= $root ? e($root['full_name'] . ' · ' . $root['member_id']) : 'No member' ?> — vacant slots shown as dashed nodes.</p>
+        <div class="team-banner-main">
+            <span class="team-banner-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
+            </span>
+            <div>
+                <span class="team-banner-kicker">Visual binary</span>
+                <h2>Tree Board</h2>
+            </div>
         </div>
         <div class="team-banner-legend">
             <span><i class="dot root"></i> Root</span>

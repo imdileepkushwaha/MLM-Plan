@@ -49,7 +49,7 @@ function team_collect_downline(PDO $pdo, int $rootId, string $leg = 'all'): arra
     $stmtChild = $pdo->prepare('SELECT id FROM members WHERE placement_id = ? AND position = ? LIMIT 1');
     $stmtMember = $pdo->prepare("
         SELECT m.id, m.member_id, m.full_name, m.username, m.phone, m.email, m.status, m.position,
-               m.left_count, m.right_count, m.join_date, m.wallet_balance, m.photo,
+               m.left_count, m.right_count, m.join_date, m.wallet_balance, m.photo, m.package_id,
                p.name AS package_name,
                s.member_id AS sponsor_mid, s.full_name AS sponsor_name
         FROM members m
@@ -86,7 +86,7 @@ function team_get_directs(PDO $pdo, int $sponsorId): array
 {
     $stmt = $pdo->prepare("
         SELECT m.id, m.member_id, m.full_name, m.username, m.phone, m.email, m.status,
-               m.position, m.join_date, m.left_count, m.right_count, m.wallet_balance, m.photo,
+               m.position, m.join_date, m.left_count, m.right_count, m.wallet_balance, m.photo, m.package_id,
                p.name AS package_name
         FROM members m
         LEFT JOIN packages p ON p.id = m.package_id

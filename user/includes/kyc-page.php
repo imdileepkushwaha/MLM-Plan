@@ -145,8 +145,15 @@ require_once __DIR__ . '/header.php';
     <aside class="kyc-side">
         <div class="kyc-side-card">
             <div class="kyc-side-head">
-                <span class="kyc-side-kicker">KYC checklist</span>
-                <h2>Documents</h2>
+                <div class="kyc-side-head-main">
+                    <span class="kyc-side-ico" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15l2 2 4-4"/></svg>
+                    </span>
+                    <div>
+                        <span class="kyc-side-kicker">KYC checklist</span>
+                        <h2>Documents</h2>
+                    </div>
+                </div>
             </div>
             <ul class="kyc-check-list">
                 <?php foreach ($types as $type => $info):
@@ -170,10 +177,21 @@ require_once __DIR__ . '/header.php';
     <section class="kyc-main">
         <div class="kyc-form-card">
             <div class="kyc-form-head">
-                <div>
-                    <span class="up-panel-kicker">Identity verification</span>
-                    <h2><?= e($meta['title']) ?></h2>
-                    <p>Submit details clearly. Admin will review and approve.</p>
+                <div class="up-panel-head-main">
+                    <span class="up-panel-head-ico" aria-hidden="true">
+                        <?php if ($kycType === 'pan'): ?>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M8 15h3"/></svg>
+                        <?php elseif ($kycType === 'bank'): ?>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 10l9-7 9 7"/><path d="M5 10v8h14v-8"/><path d="M9 18v-4h6v4"/></svg>
+                        <?php else: ?>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M3 16c1.5-2 3.5-3 6-3s4.5 1 6 3"/></svg>
+                        <?php endif; ?>
+                    </span>
+                    <div>
+                        <span class="up-panel-kicker">Identity verification</span>
+                        <h2><?= e($meta['title']) ?></h2>
+                        <p>Submit details clearly. Admin will review and approve.</p>
+                    </div>
                 </div>
                 <span class="kyc-status-pill <?= kyc_status_badge_class($status) ?>"><?= e(kyc_status_label($status)) ?></span>
             </div>

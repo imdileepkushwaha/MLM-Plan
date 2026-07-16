@@ -30,7 +30,58 @@ try {
 }
 
 if (session_status() === PHP_SESSION_NONE) {
+    // Keep PHP session cookie alive long enough; idle logout is enforced in-app (15 min).
+    ini_set('session.gc_maxlifetime', (string) max(1800, (int) ini_get('session.gc_maxlifetime')));
     session_start();
+}
+
+/** Idle timeout in seconds (15 minutes). */
+define('SESSION_IDLE_TIMEOUT', 15 * 60);
+
+/**
+ * Record last activity for a session scope (user|admin|member).
+ */
+function session_touch(string $scope): void
+{
+    $_SESSION[$scope . '_last_activity'] = time();
+}
+
+/**
+ * Clear keys for a session scope after timeout / logout.
+ */
+function session_clear_scope(string $scope): void
+{
+    $map = [
+        'user' => ['user_id', 'user_name', 'user_code', 'user_last_activity'],
+        'admin' => ['admin_id', 'admin_name', 'admin_username', 'admin_last_activity'],
+        'member' => [
+            'member_id', 'member_code', 'member_name',
+            'member_login_by_admin', 'member_login_admin_id', 'member_last_activity',
+        ],
+    ];
+    foreach ($map[$scope] ?? [] as $key) {
+        unset($_SESSION[$key]);
+    }
+}
+
+/**
+ * Enforce idle timeout for an authenticated scope.
+ * Call after confirming the primary session id key exists.
+ */
+function session_enforce_idle(string $scope, string $loginUrl): void
+{
+    $activityKey = $scope . '_last_activity';
+    $now = time();
+    $last = (int) ($_SESSION[$activityKey] ?? 0);
+
+    if ($last > 0 && ($now - $last) > SESSION_IDLE_TIMEOUT) {
+        session_clear_scope($scope);
+        flash('error', 'Your session expired after 15 minutes of inactivity. Please sign in again.');
+        header('Location: ' . $loginUrl);
+        exit;
+    }
+
+    $_SESSION[$activityKey] = $now;
 }
 
 function setting(string $key, string $default = ''): string
@@ -85,6 +136,7 @@ function require_admin(): void
         header('Location: login.php');
         exit;
     }
+    session_enforce_idle('admin', 'login.php');
 }
 
 function log_activity(string $action, string $details = ''): void

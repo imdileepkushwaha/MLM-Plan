@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../includes/procedures.php';
 $pageTitle = 'Withdrawals';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -13,18 +14,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($wd && $wd['status'] === 'pending') {
         if ($action === 'approve') {
-            $pdo->prepare("UPDATE withdrawals SET status = 'approved', admin_note = ?, processed_at = NOW() WHERE id = ?")
-                ->execute([$note, $id]);
-            // Deduct wallet
-            $pdo->prepare('UPDATE members SET wallet_balance = wallet_balance - ? WHERE id = ? AND wallet_balance >= ?')
-                ->execute([(float)$wd['amount'], (int)$wd['member_id'], (float)$wd['amount']]);
-            log_activity('withdrawal_approve', "Approved withdrawal #$id");
-            flash('success', 'Withdrawal approved. Wallet deducted.');
+            $sp = sp_call_approve_withdrawal($pdo, $id, $note);
+            if ($sp['message'] !== 'Procedure unavailable' && $sp['ok']) {
+                log_activity('withdrawal_approve', "Approved withdrawal #$id");
+                flash('success', $sp['message']);
+            } elseif ($sp['message'] !== 'Procedure unavailable' && !$sp['ok']) {
+                flash('error', $sp['message']);
+            } else {
+                // PHP fallback
+                $pdo->prepare("UPDATE withdrawals SET status = 'approved', admin_note = ?, processed_at = NOW() WHERE id = ?")
+                    ->execute([$note, $id]);
+                $pdo->prepare('UPDATE members SET wallet_balance = wallet_balance - ? WHERE id = ? AND wallet_balance >= ?')
+                    ->execute([(float) $wd['amount'], (int) $wd['member_id'], (float) $wd['amount']]);
+                log_activity('withdrawal_approve', "Approved withdrawal #$id");
+                flash('success', 'Withdrawal approved. Wallet deducted.');
+            }
         } elseif ($action === 'reject') {
-            $pdo->prepare("UPDATE withdrawals SET status = 'rejected', admin_note = ?, processed_at = NOW() WHERE id = ?")
-                ->execute([$note, $id]);
-            log_activity('withdrawal_reject', "Rejected withdrawal #$id");
-            flash('success', 'Withdrawal rejected.');
+            $sp = sp_call_reject_withdrawal($pdo, $id, $note);
+            if ($sp['message'] !== 'Procedure unavailable' && $sp['ok']) {
+                log_activity('withdrawal_reject', "Rejected withdrawal #$id");
+                flash('success', $sp['message']);
+            } elseif ($sp['message'] !== 'Procedure unavailable' && !$sp['ok']) {
+                flash('error', $sp['message']);
+            } else {
+                $pdo->prepare("UPDATE withdrawals SET status = 'rejected', admin_note = ?, processed_at = NOW() WHERE id = ?")
+                    ->execute([$note, $id]);
+                log_activity('withdrawal_reject', "Rejected withdrawal #$id");
+                flash('success', 'Withdrawal rejected.');
+            }
         } elseif ($action === 'paid') {
             $pdo->prepare("UPDATE withdrawals SET status = 'paid', admin_note = ?, processed_at = NOW() WHERE id = ?")
                 ->execute([$note, $id]);

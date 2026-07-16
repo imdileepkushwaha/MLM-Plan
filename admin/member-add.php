@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../includes/procedures.php';
 $pageTitle = 'Add Member';
 
 $packages = $pdo->query("SELECT id, name, amount FROM packages WHERE status = 'active' ORDER BY amount")->fetchAll();
@@ -120,6 +121,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 function findBinaryPlacement(PDO $pdo, int $startId, string $position): ?int
 {
+    $viaSp = sp_call_find_binary_placement($pdo, $startId, $position);
+    if ($viaSp !== null) {
+        return $viaSp;
+    }
+
     $parentId = $startId;
     for ($i = 0; $i < 50; $i++) {
         $stmt = $pdo->prepare('SELECT id FROM members WHERE placement_id = ? AND position = ? LIMIT 1');
@@ -135,6 +141,10 @@ function findBinaryPlacement(PDO $pdo, int $startId, string $position): ?int
 
 function updateUplineCounts(PDO $pdo, int $placementId, string $position): void
 {
+    if (sp_call_update_upline_counts($pdo, $placementId, $position)) {
+        return;
+    }
+
     $current = $placementId;
     $side = $position;
     $guard = 0;

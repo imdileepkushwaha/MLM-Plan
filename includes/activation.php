@@ -3,6 +3,8 @@
  * Member plan activation helpers
  */
 
+require_once __DIR__ . '/procedures.php';
+
 function activation_packages(PDO $pdo): array
 {
     try {
@@ -29,7 +31,8 @@ function activation_pay_referral(PDO $pdo, int $sponsorId, int $fromMemberId, st
 }
 
 /**
- * Activate member with selected package. Returns ['ok'=>bool,'error'=>?string]
+ * Activate member with selected package. Uses SP when available, else PHP fallback.
+ * Returns ['ok'=>bool,'error'=>?string,'package'=>?array]
  */
 function activation_apply(PDO $pdo, array $user, int $packageId): array
 {
@@ -48,6 +51,17 @@ function activation_apply(PDO $pdo, array $user, int $packageId): array
     }
 
     $uid = (int) $user['id'];
+
+    // Prefer stored procedure (atomic activation + referral)
+    $sp = sp_call_activate_member($pdo, $uid, $packageId);
+    if ($sp['message'] !== 'Procedure unavailable') {
+        if ($sp['ok']) {
+            return ['ok' => true, 'error' => null, 'package' => $pkg];
+        }
+        return ['ok' => false, 'error' => $sp['message'] ?: 'Activation failed.'];
+    }
+
+    // PHP fallback
     $amount = (float) $pkg['amount'];
     $memberCode = (string) ($user['member_id'] ?? '');
 

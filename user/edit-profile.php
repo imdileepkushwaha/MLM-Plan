@@ -109,14 +109,16 @@ $packageName = $user['package_name'] ?? '—';
     <section class="ep-main">
         <div class="ep-form-card">
             <div class="ep-form-head">
-                <div>
-                    <span class="up-panel-kicker">Account settings</span>
-                    <h2>Personal Information</h2>
-                    <p>Keep your contact details up to date for withdrawals and support.</p>
+                <div class="up-panel-head-main">
+                    <span class="up-panel-head-ico" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+                    </span>
+                    <div>
+                        <span class="up-panel-kicker">Account settings</span>
+                        <h2>Personal Information</h2>
+                        <p>Keep your contact details up to date for withdrawals and support.</p>
+                    </div>
                 </div>
-                <span class="up-panel-head-ico" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
-                </span>
             </div>
 
             <div class="ep-form-body">

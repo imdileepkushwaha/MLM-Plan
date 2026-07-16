@@ -10,6 +10,7 @@ function require_user(): void
         header('Location: login.php');
         exit;
     }
+    session_enforce_idle('user', 'login.php');
 }
 
 function current_user(PDO $pdo, bool $fresh = false): ?array

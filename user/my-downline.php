@@ -72,10 +72,14 @@ if ($q !== '') {
 
 <section class="team-card">
     <div class="team-banner is-gold">
-        <div>
-            <span class="team-banner-kicker">Binary placement</span>
-            <h2>Placement Downline</h2>
-            <p>Filter by left / right leg and search members.</p>
+        <div class="team-banner-main">
+            <span class="team-banner-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><path d="M12 7v4M12 11L5 17M12 11l7 6"/></svg>
+            </span>
+            <div>
+                <span class="team-banner-kicker">Binary placement</span>
+                <h2>Placement Downline</h2>
+            </div>
         </div>
         <form method="get" class="team-search on-dark">
             <select name="leg">

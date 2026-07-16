@@ -61,10 +61,14 @@ $rightSum = array_sum(array_map(fn ($m) => (int) $m['right_count'], $rows));
 
 <section class="team-card">
     <div class="team-banner is-gold">
-        <div>
-            <span class="team-banner-kicker">Referral network</span>
-            <h2>Direct Members</h2>
-            <p>People who joined using your sponsor link.</p>
+        <div class="team-banner-main">
+            <span class="team-banner-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+            </span>
+            <div>
+                <span class="team-banner-kicker">Referral network</span>
+                <h2>Direct Members</h2>
+            </div>
         </div>
         <form method="get" class="team-search on-dark">
             <input type="search" name="q" value="<?= e($q) ?>" placeholder="Search name, ID, phone…">

@@ -29,6 +29,12 @@ function ensure_member_registration_columns(PDO $pdo): void
 
 function reg_find_binary_placement(PDO $pdo, int $startId, string $position): ?int
 {
+    require_once __DIR__ . '/procedures.php';
+    $viaSp = sp_call_find_binary_placement($pdo, $startId, $position);
+    if ($viaSp !== null) {
+        return $viaSp;
+    }
+
     $parentId = $startId;
     for ($i = 0; $i < 50; $i++) {
         $stmt = $pdo->prepare('SELECT id FROM members WHERE placement_id = ? AND position = ? LIMIT 1');
@@ -44,6 +50,11 @@ function reg_find_binary_placement(PDO $pdo, int $startId, string $position): ?i
 
 function reg_update_upline_counts(PDO $pdo, int $placementId, string $position): void
 {
+    require_once __DIR__ . '/procedures.php';
+    if (sp_call_update_upline_counts($pdo, $placementId, $position)) {
+        return;
+    }
+
     $current = $placementId;
     $side = $position;
     $guard = 0;

@@ -77,7 +77,7 @@ $deepest = $grouped ? max(array_keys($grouped)) : 0;
     ?>
 <section class="team-card level-card">
     <div class="team-banner is-level">
-        <div class="level-banner-left">
+        <div class="team-banner-main">
             <span class="team-level big">L<?= (int) $level ?></span>
             <div>
                 <span class="team-banner-kicker">Generation</span>

@@ -270,14 +270,16 @@ $transactions = array_slice($transactions, 0, 8);
 
             <div class="pp-card pp-ref-section">
                 <div class="pp-panel-banner is-coral">
-                    <div>
-                        <span class="pp-panel-kicker">Grow team</span>
-                        <h3>Referral Links</h3>
-                        <p>Share Left / Right links under ID <strong><?= e($memberCode) ?></strong>.</p>
+                    <div class="pp-panel-banner-main">
+                        <span class="pp-panel-ico" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+                        </span>
+                        <div>
+                            <span class="pp-panel-kicker">Grow team</span>
+                            <h3>Referral Links</h3>
+                            <p>Share Left / Right links under ID <strong><?= e($memberCode) ?></strong>.</p>
+                        </div>
                     </div>
-                    <span class="pp-panel-ico" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
-                    </span>
                 </div>
 
                 <div class="pp-ref-body">
@@ -385,7 +387,7 @@ $transactions = array_slice($transactions, 0, 8);
                 <div class="pp-stat-card">
                     <div class="pp-stat-top">
                         <span class="pp-stat-ico green">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3"/><path d="M9 13c6.667 0 6.667-10 0-10"/></svg>
                         </span>
                         <span class="pp-chip up">↑ Income</span>
                     </div>
@@ -407,14 +409,16 @@ $transactions = array_slice($transactions, 0, 8);
             <div class="pp-mid-row">
                 <div class="pp-card pp-sponsor">
                     <div class="pp-panel-banner is-gold">
-                        <div>
-                            <span class="pp-panel-kicker">Upline</span>
-                            <h3>Sponsor Network Info</h3>
-                            <p>Your place in the <?= e($company) ?> binary network.</p>
+                        <div class="pp-panel-banner-main">
+                            <span class="pp-panel-ico" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><path d="M12 7v4M12 11L5 17M12 11l7 6"/></svg>
+                            </span>
+                            <div>
+                                <span class="pp-panel-kicker">Upline</span>
+                                <h3>Sponsor Network Info</h3>
+                                <p>Your place in the <?= e($company) ?> binary network.</p>
+                            </div>
                         </div>
-                        <span class="pp-panel-ico" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><path d="M12 7v4M12 11L5 17M12 11l7 6"/></svg>
-                        </span>
                     </div>
                     <div class="pp-sponsor-body">
                         <div class="pp-sponsor-chips">
@@ -444,10 +448,15 @@ $transactions = array_slice($transactions, 0, 8);
 
                 <div class="pp-card pp-chart-card">
                     <div class="pp-panel-banner is-teal">
-                        <div>
-                            <span class="pp-panel-kicker">7-day trend</span>
-                            <h3>Weekly Productivity</h3>
-                            <p>Commission activity across the last week.</p>
+                        <div class="pp-panel-banner-main">
+                            <span class="pp-panel-ico" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 3 5-6"/></svg>
+                            </span>
+                            <div>
+                                <span class="pp-panel-kicker">7-day trend</span>
+                                <h3>Weekly Productivity</h3>
+                                <p>Commission activity across the last week.</p>
+                            </div>
                         </div>
                         <span class="pp-chip up"><?= $weekPct >= 0 ? '+' : '' ?><?= (int) $weekPct ?>%</span>
                     </div>
@@ -497,14 +506,16 @@ $transactions = array_slice($transactions, 0, 8);
             <div class="pp-bottom-row">
                 <div class="pp-card pp-quick-card">
                     <div class="pp-panel-banner is-orange">
-                        <div>
-                            <span class="pp-panel-kicker">Shortcuts</span>
-                            <h3>Quick Links</h3>
-                            <p>Snapshot chips for status, team and wallet.</p>
+                        <div class="pp-panel-banner-main">
+                            <span class="pp-panel-ico" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                            </span>
+                            <div>
+                                <span class="pp-panel-kicker">Shortcuts</span>
+                                <h3>Quick Links</h3>
+                                <p>Snapshot chips for status, team and wallet.</p>
+                            </div>
                         </div>
-                        <span class="pp-panel-ico" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-                        </span>
                     </div>
                     <div class="pp-quick">
                         <div class="pp-q orange">
@@ -554,14 +565,16 @@ $transactions = array_slice($transactions, 0, 8);
 
                 <div class="pp-card pp-activity-card">
                     <div class="pp-panel-banner is-green">
-                        <div>
-                            <span class="pp-panel-kicker">Timeline</span>
-                            <h3>Recent Activity</h3>
-                            <p>Key milestones on your membership journey.</p>
+                        <div class="pp-panel-banner-main">
+                            <span class="pp-panel-ico" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                            </span>
+                            <div>
+                                <span class="pp-panel-kicker">Timeline</span>
+                                <h3>Recent Activity</h3>
+                                <p>Key milestones on your membership journey.</p>
+                            </div>
                         </div>
-                        <span class="pp-panel-ico" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-                        </span>
                     </div>
                     <ul class="pp-timeline">
                         <li>
@@ -591,13 +604,15 @@ $transactions = array_slice($transactions, 0, 8);
 
             <div class="pp-card pp-txn-card">
                 <div class="pp-txn-banner">
-                    <div class="pp-txn-banner-text">
-                        <span class="pp-txn-kicker">Wallet ledger</span>
-                        <h3>Recent Transactions</h3>
-                        <p>Latest commissions and withdrawal activity on your account.</p>
-                    </div>
-                    <div class="pp-txn-banner-ico" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+                    <div class="pp-panel-banner-main">
+                        <div class="pp-txn-banner-ico" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+                        </div>
+                        <div class="pp-txn-banner-text">
+                            <span class="pp-txn-kicker">Wallet ledger</span>
+                            <h3>Recent Transactions</h3>
+                            <!-- <p>Latest commissions and withdrawal activity on your account.</p> -->
+                        </div>
                     </div>
                 </div>
 

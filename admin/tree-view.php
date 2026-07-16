@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../includes/procedures.php';
 $pageTitle = 'Tree View';
 
 $rootId = (int) ($_GET['root'] ?? 0);
@@ -9,6 +10,10 @@ $maxDepth = 4;
 
 function tv_updateUplineCounts(PDO $pdo, int $placementId, string $position): void
 {
+    if (sp_call_update_upline_counts($pdo, $placementId, $position)) {
+        return;
+    }
+
     $current = $placementId;
     $side = $position;
     $guard = 0;

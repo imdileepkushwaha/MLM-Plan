@@ -20,6 +20,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['member_name'] = $member['full_name'];
         $_SESSION['member_login_by_admin'] = true;
         $_SESSION['member_login_admin_id'] = $_SESSION['admin_id'] ?? null;
+        session_touch('member');
+        if (!empty($_SESSION['admin_id'])) {
+            session_touch('admin');
+        }
 
         log_activity('direct_member_login', 'Admin logged in as ' . $member['member_id']);
         header('Location: ../member/index.php');

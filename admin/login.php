@@ -2,12 +2,13 @@
 require_once __DIR__ . '/../config/database.php';
 
 if (!empty($_SESSION['admin_id'])) {
+    session_enforce_idle('admin', 'login.php');
     header('Location: index.php');
     exit;
 }
 
 $error = '';
-
+$flash = get_flash();
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = trim($_POST['username'] ?? '');
     $password = $_POST['password'] ?? '';
@@ -23,6 +24,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['admin_id'] = $admin['id'];
             $_SESSION['admin_name'] = $admin['full_name'];
             $_SESSION['admin_username'] = $admin['username'];
+            session_touch('admin');
 
             $pdo->prepare('UPDATE admins SET last_login = NOW() WHERE id = ?')->execute([$admin['id']]);
             log_activity('login', 'Admin logged in');
@@ -67,6 +69,9 @@ $company = setting('company_name', 'Binary MLM');
                 <p class="auth-sub">Sign in to continue to your dashboard</p>
             </div>
 
+            <?php if (!empty($flash)): ?>
+                <div class="alert alert-<?= e($flash['type'] === 'success' ? 'success' : ($flash['type'] === 'error' ? 'error' : 'info')) ?> auth-alert"><?= e($flash['message']) ?></div>
+            <?php endif; ?>
             <?php if ($error): ?><div class="alert alert-error auth-alert"><?= e($error) ?></div><?php endif; ?>
 
             <form method="post" autocomplete="off" class="auth-form">
