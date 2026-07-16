@@ -2,6 +2,12 @@
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/../includes/registration.php';
 
+if (is_maintenance_mode()) {
+    flash('error', 'Portal is under maintenance. Registration is temporarily disabled.');
+    header('Location: login.php');
+    exit;
+}
+
 if (!empty($_SESSION['user_id'])) {
     header('Location: index.php');
     exit;

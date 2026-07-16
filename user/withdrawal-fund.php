@@ -20,6 +20,9 @@ $wallet = (float) $user['wallet_balance'];
 $pendingSum = wd_pending_sum($pdo, $uid);
 $available = wd_available_balance($pdo, $user);
 $prefills = wd_kyc_bank_prefills($pdo, $uid);
+$tdsPct = wd_tds_percent();
+$feePct = wd_fee_percent();
+$sampleBreak = wd_calc_breakdown($pdo, max($minAmt, 1000));
 
 $allowedMethods = ['Bank Transfer', 'UPI', 'Other'];
 $form = [
@@ -56,9 +59,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (!$errors) {
-        $pdo->prepare('INSERT INTO withdrawals (member_id, amount, payment_method, account_details, status) VALUES (?,?,?,?,?)')
-            ->execute([$uid, $amount, $method, $details, 'pending']);
-        flash('success', 'Withdrawal request submitted. Waiting for admin approval.');
+        wd_ensure_columns($pdo);
+        $break = wd_calc_breakdown($pdo, $amount);
+        $pdo->prepare('INSERT INTO withdrawals (member_id, amount, tds_amount, fee_amount, other_deduction, net_amount, payment_method, account_details, status) VALUES (?,?,?,?,?,?,?,?,?)')
+            ->execute([
+                $uid,
+                $break['gross'],
+                $break['tds_amount'],
+                $break['fee_amount'],
+                $break['other_deduction'],
+                $break['net_amount'],
+                $method,
+                $details,
+                'pending',
+            ]);
+        flash('success', 'Withdrawal request submitted. Net payout after deductions: ' . strip_tags(currency($break['net_amount'])) . '. Waiting for admin approval.');
         header('Location: withdrawal-report.php');
         exit;
     }
@@ -210,7 +225,14 @@ require_once __DIR__ . '/includes/header.php';
                 </div>
 
                 <div class="wd-form-foot">
-                    <p class="wd-form-note">Wallet is deducted only after admin approval.</p>
+                    <div class="wd-break" id="wdBreak">
+                        <div class="wd-break-row"><span>Gross request</span><strong id="wdGross">—</strong></div>
+                        <div class="wd-break-row"><span>TDS (<?= e(rtrim(rtrim(number_format($tdsPct, 2, '.', ''), '0'), '.')) ?>%)</span><strong id="wdTds">—</strong></div>
+                        <div class="wd-break-row"><span>Processing fee (<?= e(rtrim(rtrim(number_format($feePct, 2, '.', ''), '0'), '.')) ?>%)</span><strong id="wdFee">—</strong></div>
+                        <div class="wd-break-row"><span>Other deductions</span><strong id="wdOther">—</strong></div>
+                        <div class="wd-break-row is-net"><span>You receive (net)</span><strong id="wdNet">—</strong></div>
+                        <p class="wd-form-note">Wallet deducts the <strong>gross</strong> amount on approval. Bank/UPI receives <strong>net</strong> after TDS &amp; fees.</p>
+                    </div>
                     <div class="wd-form-actions">
                         <a href="withdrawal-report.php" class="up-btn up-btn-outline">Cancel</a>
                         <button type="submit" class="up-btn up-btn-primary wd-submit" <?= $available < $minAmt ? 'disabled' : '' ?>>
@@ -319,11 +341,40 @@ require_once __DIR__ . '/includes/header.php';
 (function () {
     var maxBtn = document.getElementById('wdMaxBtn');
     var amount = document.getElementById('amount');
+    var tdsPct = <?= json_encode($tdsPct) ?>;
+    var feePct = <?= json_encode($feePct) ?>;
+    var otherPct = <?= json_encode((float) ($sampleBreak['other_percent'] ?? 0)) ?>;
+    var otherFixed = <?= json_encode((float) ($sampleBreak['other_fixed'] ?? 0)) ?>;
+
+    function fmt(n) {
+        return '₹' + (Math.max(0, n)).toFixed(2);
+    }
+    function refreshBreak() {
+        var g = parseFloat(amount && amount.value ? amount.value : '0') || 0;
+        var tds = Math.round(g * tdsPct * 100) / 10000;
+        tds = Math.round(tds * 100) / 100;
+        var fee = Math.round(g * feePct * 100) / 10000;
+        fee = Math.round(fee * 100) / 100;
+        var other = Math.round((g * otherPct / 100 + otherFixed) * 100) / 100;
+        var net = Math.round((g - tds - fee - other) * 100) / 100;
+        var el = function (id) { return document.getElementById(id); };
+        if (el('wdGross')) el('wdGross').textContent = fmt(g);
+        if (el('wdTds')) el('wdTds').textContent = fmt(tds);
+        if (el('wdFee')) el('wdFee').textContent = fmt(fee);
+        if (el('wdOther')) el('wdOther').textContent = fmt(other);
+        if (el('wdNet')) el('wdNet').textContent = fmt(Math.max(0, net));
+    }
+
     if (maxBtn && amount && !amount.disabled) {
         maxBtn.addEventListener('click', function () {
             amount.value = amount.getAttribute('max') || '';
             amount.focus();
+            refreshBreak();
         });
+    }
+    if (amount) {
+        amount.addEventListener('input', refreshBreak);
+        refreshBreak();
     }
     document.querySelectorAll('.wd-method input[type="radio"]').forEach(function (radio) {
         radio.addEventListener('change', function () {

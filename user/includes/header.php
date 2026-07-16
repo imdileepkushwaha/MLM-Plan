@@ -2,6 +2,7 @@
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/../../includes/kyc.php';
 require_once __DIR__ . '/../../includes/withdrawal.php';
+require_once __DIR__ . '/../../includes/activation.php';
 require_user();
 
 $user = current_user($pdo);
@@ -15,8 +16,17 @@ $company = setting('company_name', 'Binary MLM');
 $pageTitle = $pageTitle ?? 'Dashboard';
 $currentPage = basename($_SERVER['PHP_SELF'], '.php');
 $initials = user_initials($user['full_name'] ?? 'User');
+$needsActivationNav = empty($user['package_id']);
+$canUpgradeNav = !$needsActivationNav && activation_can_upgrade($pdo, $user);
+$actPendingNav = activation_pending_request($pdo, (int) $user['id']);
+$showPlanNav = $needsActivationNav || $canUpgradeNav || $actPendingNav;
+$planNavIsUpgrade = !$needsActivationNav;
+$planNavLabel = $planNavIsUpgrade ? 'Upgrade' : 'Activate';
+$planNavPending = (bool) $actPendingNav;
 
 $isDash = ($currentPage === 'index');
+$isActivate = ($currentPage === 'activate');
+$isSupport = ($currentPage === 'support');
 $profilePages = ['profile', 'edit-profile', 'change-password', 'upload-photo'];
 $profileOpen = in_array($currentPage, $profilePages, true);
 $profileBadge = count($profilePages);
@@ -37,6 +47,67 @@ $reportPages = ['transaction-report'];
 $reportOpen = in_array($currentPage, $reportPages, true);
 $reportBadge = count($reportPages);
 
+$userNotifyItems = [];
+if ($needsActivationNav) {
+    if ($actPendingNav) {
+        $userNotifyItems[] = [
+            'href' => 'activate.php',
+            'title' => 'Activation pending approval',
+            'small' => 'UTR submitted — waiting for admin',
+            'tone' => 'amber',
+        ];
+    } else {
+        $userNotifyItems[] = [
+            'href' => 'activate.php',
+            'title' => 'Activate your account',
+            'small' => 'Pay package amount and submit UTR',
+            'tone' => 'red',
+        ];
+    }
+} elseif ($actPendingNav && (($actPendingNav['request_type'] ?? '') === 'upgrade')) {
+    $userNotifyItems[] = [
+        'href' => 'activate.php',
+        'title' => 'Upgrade pending approval',
+        'small' => 'Difference payment under review',
+        'tone' => 'amber',
+    ];
+} elseif ($canUpgradeNav) {
+    $userNotifyItems[] = [
+        'href' => 'activate.php',
+        'title' => 'Upgrade your plan',
+        'small' => 'Pay only the package difference',
+        'tone' => 'blue',
+    ];
+}
+if ($wdPendingBadge > 0) {
+    $userNotifyItems[] = [
+        'href' => 'withdrawal-report.php',
+        'title' => $wdPendingBadge . ' withdrawal request' . ($wdPendingBadge > 1 ? 's' : '') . ' pending',
+        'small' => 'Track payout status',
+        'tone' => 'blue',
+    ];
+}
+try {
+    $newsNotify = $pdo->query("
+        SELECT title, published_at
+        FROM news
+        WHERE status = 'active'
+        ORDER BY COALESCE(published_at, '1970-01-01') DESC, id DESC
+        LIMIT 3
+    ")->fetchAll();
+    foreach ($newsNotify as $nn) {
+        $userNotifyItems[] = [
+            'href' => 'index.php#newsTitle',
+            'title' => (string) $nn['title'],
+            'small' => !empty($nn['published_at']) ? date('d M Y', strtotime((string) $nn['published_at'])) : 'Company news',
+            'tone' => 'green',
+        ];
+    }
+} catch (Throwable $e) {
+    // ignore
+}
+$userNotifyCount = count($userNotifyItems);
+
 $icoDash = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>';
 $icoUser = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
 $icoKyc = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg>';
@@ -44,6 +115,8 @@ $icoTeam = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-wi
 $icoIncome = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3"/><path d="M9 13c6.667 0 6.667-10 0-10"/></svg>';
 $icoWd = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><circle cx="16" cy="15" r="1.5" fill="currentColor" stroke="none"/></svg>';
 $icoReports = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>';
+$icoActivate = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>';
+$icoSupport = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>';
 $icoLogout = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>';
 $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="6 9 12 15 18 9"/></svg>';
 ?>
@@ -73,6 +146,15 @@ $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="
                     <span class="up-nav-ico"><?= $icoDash ?></span>
                     <span class="up-nav-text">Dashboard</span>
                 </a>
+                <?php if ($showPlanNav): ?>
+                <a href="activate.php" class="up-nav-item<?= $isActivate ? ' is-active' : '' ?>">
+                    <span class="up-nav-ico"><?= $icoActivate ?></span>
+                    <span class="up-nav-text"><?= e($planNavLabel) ?></span>
+                    <?php if ($planNavPending): ?>
+                        <span class="up-nav-badge">1</span>
+                    <?php endif; ?>
+                </a>
+                <?php endif; ?>
             </div>
 
             <div class="up-nav-section">
@@ -93,10 +175,7 @@ $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <div class="up-nav-section">
-                <div class="up-nav-label">KYC</div>
                 <div class="up-nav-group<?= $kycOpen ? ' is-open' : '' ?>" data-up-nav-group>
                     <button type="button" class="up-nav-item up-nav-toggle<?= $kycOpen ? ' is-active' : '' ?>" data-up-nav-toggle aria-expanded="<?= $kycOpen ? 'true' : 'false' ?>">
                         <span class="up-nav-ico"><?= $icoKyc ?></span>
@@ -114,10 +193,7 @@ $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <div class="up-nav-section">
-                <div class="up-nav-label">My Team</div>
                 <div class="up-nav-group<?= $teamOpen ? ' is-open' : '' ?>" data-up-nav-group>
                     <button type="button" class="up-nav-item up-nav-toggle<?= $teamOpen ? ' is-active' : '' ?>" data-up-nav-toggle aria-expanded="<?= $teamOpen ? 'true' : 'false' ?>">
                         <span class="up-nav-ico"><?= $icoTeam ?></span>
@@ -134,10 +210,7 @@ $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <div class="up-nav-section">
-                <div class="up-nav-label">My Income</div>
                 <div class="up-nav-group<?= $incomeOpen ? ' is-open' : '' ?>" data-up-nav-group>
                     <button type="button" class="up-nav-item up-nav-toggle<?= $incomeOpen ? ' is-active' : '' ?>" data-up-nav-toggle aria-expanded="<?= $incomeOpen ? 'true' : 'false' ?>">
                         <span class="up-nav-ico"><?= $icoIncome ?></span>
@@ -155,7 +228,8 @@ $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="
                             <a href="income-other.php" class="up-nav-sublink<?= $currentPage === 'income-other' ? ' is-active' : '' ?>">Other Income</a>
                         </div>
                     </div>
-                </div>
+                </div> 
+
             </div>
 
             <div class="up-nav-section">
@@ -195,6 +269,10 @@ $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="
 
             <div class="up-nav-section">
                 <div class="up-nav-label">Account</div>
+                <a href="support.php" class="up-nav-item<?= $isSupport ? ' is-active' : '' ?>">
+                    <span class="up-nav-ico"><?= $icoSupport ?></span>
+                    <span class="up-nav-text">Support</span>
+                </a>
                 <a href="logout.php" class="up-nav-item">
                     <span class="up-nav-ico"><?= $icoLogout ?></span>
                     <span class="up-nav-text">Logout</span>
@@ -208,17 +286,54 @@ $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="
             <button type="button" class="up-menu-btn" id="upMenuBtn" aria-label="Toggle menu">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
             </button>
-            <div class="up-search">
+            <div class="up-search" data-up-search>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-                <input type="search" placeholder="Search users, orders..." disabled>
+                <input type="search" id="upSearchInput" placeholder="Search pages…" autocomplete="off" aria-label="Search pages">
+                <div class="up-search-drop" id="upSearchDrop" hidden>
+                    <a href="index.php" data-search="dashboard home">Dashboard</a>
+                    <a href="profile.php" data-search="profile account">My Profile</a>
+                    <a href="edit-profile.php" data-search="edit profile">Edit Profile</a>
+                    <a href="my-treeview.php" data-search="team tree binary">My Treeview</a>
+                    <a href="my-direct.php" data-search="direct team">My Direct</a>
+                    <a href="income-summary.php" data-search="income earnings">Income Summary</a>
+                    <a href="withdrawal-fund.php" data-search="withdraw payout">Withdrawal Fund</a>
+                    <a href="withdrawal-report.php" data-search="withdraw report">Withdrawal Report</a>
+                    <a href="transaction-report.php" data-search="transaction report">Transaction Report</a>
+                    <a href="support.php" data-search="support help contact">Support</a>
+                    <?php if ($needsActivationNav): ?>
+                    <a href="activate.php" data-search="activate package payment">Activate Account</a>
+                    <?php elseif ($canUpgradeNav || $planNavPending): ?>
+                    <a href="activate.php" data-search="upgrade package difference">Upgrade Plan</a>
+                    <?php endif; ?>
+                </div>
             </div>
             <div class="up-top-actions">
                 <button type="button" class="up-icon-btn" id="upFullscreenBtn" title="Fullscreen" aria-label="Fullscreen">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/></svg>
                 </button>
-                <button type="button" class="up-icon-btn" title="Notifications" aria-label="Notifications">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
-                </button>
+                <div class="up-user-dd up-notify-dd" data-up-dropdown>
+                    <button type="button" class="up-icon-btn" data-up-dropdown-toggle title="Notifications" aria-label="Notifications" aria-expanded="false">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+                        <?php if ($userNotifyCount > 0): ?>
+                        <span class="up-notify-badge"><?= $userNotifyCount > 9 ? '9+' : $userNotifyCount ?></span>
+                        <?php endif; ?>
+                    </button>
+                    <div class="up-user-menu up-notify-menu" data-up-dropdown-menu role="menu">
+                        <div class="up-notify-head">Notifications</div>
+                        <?php if (!$userNotifyItems): ?>
+                            <div class="up-notify-empty">No new notifications</div>
+                        <?php else: foreach ($userNotifyItems as $ni): ?>
+                            <a href="<?= e($ni['href']) ?>" class="up-notify-item" role="menuitem">
+                                <span class="up-notify-dot <?= e($ni['tone']) ?>"></span>
+                                <div>
+                                    <strong><?= e($ni['title']) ?></strong>
+                                    <small><?= e($ni['small']) ?></small>
+                                </div>
+                            </a>
+                        <?php endforeach; endif; ?>
+                        <a href="index.php" class="up-notify-foot">Open dashboard</a>
+                    </div>
+                </div>
                 <div class="up-user-dd" data-up-dropdown>
                     <button type="button" class="up-user-chip" data-up-dropdown-toggle aria-expanded="false" aria-haspopup="true">
                         <div class="up-user-meta">

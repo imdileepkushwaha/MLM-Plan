@@ -105,7 +105,7 @@ require_once __DIR__ . '/../includes/header.php';
         <form class="members-filter-form" method="get">
             <div class="form-group">
                 <label>Member ID / Username</label>
-                <input type="text" name="q" value="<?= e($search) ?>" placeholder="MLM00001">
+                <input type="text" name="q" value="<?= e($search) ?>" placeholder="<?= e(member_id_prefix() . str_pad('1', member_id_pad(), '0', STR_PAD_LEFT)) ?>">
             </div>
             <div class="form-group">
                 <label>Leg</label>

@@ -123,10 +123,12 @@ function reg_unique_username(PDO $pdo, string $email, string $fullName): string
 
 function reg_unique_member_id(PDO $pdo): string
 {
-    for ($i = 0; $i < 20; $i++) {
+    for ($i = 0; $i < 30; $i++) {
         $code = generate_member_id($pdo);
         if ($i > 0) {
-            $code = 'MLM' . str_pad((string) (random_int(1, 99999)), 5, '0', STR_PAD_LEFT);
+            $prefix = member_id_prefix();
+            $pad = member_id_pad();
+            $code = $prefix . str_pad((string) random_int(1, (int) str_repeat('9', $pad)), $pad, '0', STR_PAD_LEFT);
         }
         $stmt = $pdo->prepare('SELECT id FROM members WHERE member_id = ? LIMIT 1');
         $stmt->execute([$code]);
@@ -134,7 +136,7 @@ function reg_unique_member_id(PDO $pdo): string
             return $code;
         }
     }
-    return 'MLM' . strtoupper(bin2hex(random_bytes(3)));
+    return member_id_prefix() . strtoupper(bin2hex(random_bytes(3)));
 }
 
 function reg_captcha_generate(): string

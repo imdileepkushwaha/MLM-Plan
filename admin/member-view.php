@@ -1,8 +1,34 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../includes/activation.php';
+require_once __DIR__ . '/../includes/closing.php';
+require_once __DIR__ . '/../includes/withdrawal.php';
 $pageTitle = 'Member Details';
 
 $id = (int) ($_GET['id'] ?? 0);
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'activate_package') {
+    $pkgId = (int) ($_POST['package_id'] ?? 0);
+    $stmt = $pdo->prepare('SELECT * FROM members WHERE id = ? LIMIT 1');
+    $stmt->execute([$id]);
+    $mem = $stmt->fetch();
+    if (!$mem) {
+        flash('error', 'Member not found.');
+        header('Location: members.php');
+        exit;
+    }
+    $result = activation_apply($pdo, $mem, $pkgId);
+    if ($result['ok']) {
+        $pkgName = $result['package']['name'] ?? 'package';
+        log_activity('member_activate_package', "Activated member #{$id} with {$pkgName}");
+        flash('success', 'Package activated. Referral, BV, and level income processed.');
+    } else {
+        flash('error', $result['error'] ?? 'Activation failed.');
+    }
+    header('Location: member-view.php?id=' . $id);
+    exit;
+}
+
 $stmt = $pdo->prepare("
     SELECT m.*, p.name AS package_name, p.amount AS package_amount,
            s.full_name AS sponsor_name, s.member_id AS sponsor_mid, s.id AS sponsor_db_id,
@@ -23,6 +49,15 @@ if (!$member) {
 }
 
 $pageTitle = $member['full_name'];
+
+$packages = [];
+if (empty($member['package_id'])) {
+    $packages = activation_packages($pdo);
+}
+
+$pairBv = closing_pair_bv();
+$flush = max(0, (int) setting('binary_flush_pairs', '0'));
+$openMatch = closing_compute_match((float) $member['left_bv'], (float) $member['right_bv'], $pairBv, $flush);
 
 $leftChild = $pdo->prepare('SELECT * FROM members WHERE placement_id = ? AND position = ?');
 $leftChild->execute([$id, 'left']);
@@ -71,11 +106,37 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
     </div>
     <div class="mv-hero-actions">
-        <a href="tree-view.php?root=<?= (int)$member['id'] ?>" class="btn btn-primary btn-sm">View Tree</a>
+        <a href="member-edit.php?id=<?= (int)$member['id'] ?>" class="btn btn-primary btn-sm">Edit Member</a>
+        <a href="tree-view.php?root=<?= (int)$member['id'] ?>" class="btn btn-outline btn-sm">View Tree</a>
         <a href="direct-member-login.php?q=<?= urlencode($member['member_id']) ?>" class="btn btn-outline btn-sm">Login As</a>
         <a href="members.php" class="btn btn-outline btn-sm">← Back</a>
     </div>
 </div>
+
+<?php if (empty($member['package_id'])): ?>
+<div class="panel" style="margin-bottom:1rem">
+    <div class="panel-header"><h2>Activate Package</h2></div>
+    <div class="panel-body">
+        <?php if (!$packages): ?>
+            <p class="muted">No active packages available. Add one under Packages first.</p>
+        <?php else: ?>
+            <form method="post" class="filters" style="align-items:flex-end" onsubmit="return confirm('Activate this member package? Referral, BV and level income will run.');">
+                <input type="hidden" name="action" value="activate_package">
+                <div class="form-group">
+                    <label>Package</label>
+                    <select name="package_id" required>
+                        <option value="">Select package…</option>
+                        <?php foreach ($packages as $p): ?>
+                            <option value="<?= (int) $p['id'] ?>"><?= e($p['name']) ?> — <?= currency((float) $p['amount']) ?> (BV <?= number_format((float) $p['bv'], 0) ?>)</option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">Activate now</button>
+            </form>
+        <?php endif; ?>
+    </div>
+</div>
+<?php endif; ?>
 
 <div class="mv-kpis">
     <div class="mv-kpi g-blue">
@@ -93,6 +154,11 @@ require_once __DIR__ . '/../includes/header.php';
     <div class="mv-kpi g-orange">
         <span class="mv-kpi-label">Right BV</span>
         <strong><?= number_format((float)$member['right_bv'], 0) ?></strong>
+    </div>
+    <div class="mv-kpi g-purple">
+        <span class="mv-kpi-label">Open Pairs</span>
+        <strong><?= number_format((float)$openMatch['pairs'], 2) ?></strong>
+        <small style="display:block;font-size:0.7rem;font-weight:600;color:#8392ab;margin-top:0.2rem">Match BV <?= number_format((float)$openMatch['matched_bv'], 0) ?></small>
     </div>
     <div class="mv-kpi g-red">
         <span class="mv-kpi-label">Wallet</span>
@@ -211,14 +277,14 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
         <div class="table-wrap">
             <table class="data">
-                <thead><tr><th>Amount</th><th>Method</th><th>Status</th><th>Date</th></tr></thead>
+                <thead><tr><th>Gross</th><th>Net</th><th>Status</th><th>Date</th></tr></thead>
                 <tbody>
                 <?php if (!$wdList): ?>
                     <tr><td colspan="4"><div class="empty-state" style="padding:1.5rem"><strong>No withdrawals</strong></div></td></tr>
                 <?php else: foreach ($wdList as $w): ?>
                     <tr>
                         <td><strong><?= currency((float)$w['amount']) ?></strong></td>
-                        <td><?= e($w['payment_method'] ?? '—') ?></td>
+                        <td><?= currency(wd_net_display($w)) ?></td>
                         <td><span class="badge badge-<?= e($w['status']) ?>"><?= e($w['status']) ?></span></td>
                         <td><span class="muted"><?= date('d M Y', strtotime($w['requested_at'])) ?></span></td>
                     </tr>

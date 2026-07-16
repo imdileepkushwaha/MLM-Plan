@@ -247,8 +247,8 @@ require_once __DIR__ . '/../includes/header.php';
                             <input type="hidden" name="back_type" value="<?= e($typeFilter) ?>">
                             <input type="text" name="kyc_note" placeholder="Note (optional)" class="kyc-note-input">
                             <div class="action-icons">
-                                <button type="submit" name="action" value="approve" class="btn btn-primary btn-sm">Approve</button>
-                                <button type="submit" name="action" value="reject" class="btn btn-outline btn-sm" data-confirm="Reject this document?">Reject</button>
+                                <?= action_approve_btn('Approve this KYC document?') ?>
+                                <?= action_reject_btn('Reject this document?') ?>
                             </div>
                         </form>
                         <?php else: ?>

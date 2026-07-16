@@ -3,6 +3,7 @@ $pageTitle = 'Withdrawal Report';
 require_once __DIR__ . '/../includes/withdrawal.php';
 require_once __DIR__ . '/includes/header.php';
 
+wd_ensure_columns($pdo);
 $uid = (int) $user['id'];
 $statusFilter = $_GET['status'] ?? '';
 $page = max(1, (int) ($_GET['page'] ?? 1));
@@ -105,7 +106,9 @@ $allCount = (int) $ac->fetchColumn();
             <thead>
                 <tr>
                     <th>ID</th>
-                    <th>Amount</th>
+                    <th>Gross</th>
+                    <th>Deductions</th>
+                    <th>Net</th>
                     <th>Method</th>
                     <th>Account</th>
                     <th>Status</th>
@@ -117,7 +120,7 @@ $allCount = (int) $ac->fetchColumn();
             <tbody>
             <?php if (!$rows): ?>
                 <tr>
-                    <td colspan="8">
+                    <td colspan="10">
                         <div class="wd-empty">
                             <strong>No withdrawals found</strong>
                             <p>Submit a request from Withdrawal Fund to get started.</p>
@@ -129,6 +132,13 @@ $allCount = (int) $ac->fetchColumn();
                 <tr>
                     <td><strong>#<?= (int) $r['id'] ?></strong></td>
                     <td><strong class="wd-amt"><?= currency((float) $r['amount']) ?></strong></td>
+                    <td>
+                        <small>
+                            TDS <?= currency((float) ($r['tds_amount'] ?? 0)) ?><br>
+                            Fee <?= currency((float) ($r['fee_amount'] ?? 0) + (float) ($r['other_deduction'] ?? 0)) ?>
+                        </small>
+                    </td>
+                    <td><strong><?= currency(wd_net_display($r)) ?></strong></td>
                     <td><?= e($r['payment_method'] ?? '—') ?></td>
                     <td><div class="wd-account"><?= nl2br(e($r['account_details'] ?? '—')) ?></div></td>
                     <td><?= wd_status_pill((string) $r['status']) ?></td>

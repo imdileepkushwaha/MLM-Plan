@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS bank_accounts (
     branch_name VARCHAR(150) NULL,
     account_type VARCHAR(50) DEFAULT 'Current',
     status ENUM('active','inactive') DEFAULT 'active',
+    upi_id VARCHAR(100) NULL,
+    qr_code VARCHAR(255) NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (bank_id) REFERENCES banks(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

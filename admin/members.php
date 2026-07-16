@@ -40,13 +40,10 @@ $total = (int) $countStmt->fetchColumn();
 $totalPages = max(1, (int) ceil($total / $perPage));
 
 $stmt = $pdo->prepare("
-    SELECT m.*, p.name AS package_name,
-           s.full_name AS sponsor_name, s.member_id AS sponsor_mid,
-           pl.full_name AS parent_name, pl.member_id AS parent_mid
+    SELECT m.id, m.member_id, m.username, m.full_name, m.email, m.phone,
+           m.status, m.join_date, m.package_id, p.name AS package_name
     FROM members m
     LEFT JOIN packages p ON p.id = m.package_id
-    LEFT JOIN members s ON s.id = m.sponsor_id
-    LEFT JOIN members pl ON pl.id = m.placement_id
     WHERE $whereSql
     ORDER BY m.id DESC
     LIMIT $perPage OFFSET $offset
@@ -133,11 +130,8 @@ require_once __DIR__ . '/../includes/header.php';
             <thead>
                 <tr>
                     <th>Member</th>
-                    <th>Sponsor</th>
-                    <th>Parent ID</th>
+                    <th>Contact</th>
                     <th>Package</th>
-                    <th>Team L / R</th>
-                    <th>Wallet</th>
                     <th>Status</th>
                     <th>Joined</th>
                     <th class="text-right">Actions</th>
@@ -146,7 +140,7 @@ require_once __DIR__ . '/../includes/header.php';
             <tbody>
             <?php if (!$members): ?>
                 <tr>
-                    <td colspan="9">
+                    <td colspan="6">
                         <div class="empty-state">
                             <strong>No members found</strong>
                             <p>Try a different search or add a new member.</p>
@@ -158,7 +152,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <tr>
                     <td>
                         <div class="member-cell">
-                            <span class="member-avatar"><?= strtoupper(substr($m['full_name'], 0, 1)) ?></span>
+                            <span class="member-avatar"><?= strtoupper(substr((string) $m['full_name'], 0, 1)) ?></span>
                             <div>
                                 <a class="member-id" href="member-view.php?id=<?= (int) $m['id'] ?>"><?= e($m['member_id']) ?></a>
                                 <strong><?= e($m['full_name']) ?></strong>
@@ -167,46 +161,30 @@ require_once __DIR__ . '/../includes/header.php';
                         </div>
                     </td>
                     <td>
-                        <?php if ($m['sponsor_mid']): ?>
-                            <span class="sponsor-chip"><?= e($m['sponsor_mid']) ?></span>
-                            <small class="d-block muted"><?= e($m['sponsor_name']) ?></small>
+                        <?php if (!empty($m['phone']) || !empty($m['email'])): ?>
+                            <?php if (!empty($m['phone'])): ?>
+                                <strong><?= e($m['phone']) ?></strong>
+                            <?php endif; ?>
+                            <?php if (!empty($m['email'])): ?>
+                                <small class="d-block muted"><?= e($m['email']) ?></small>
+                            <?php endif; ?>
                         <?php else: ?>
                             <span class="muted">—</span>
-                        <?php endif; ?>
-                    </td>
-                    <td>
-                        <?php if ($m['parent_mid']): ?>
-                            <span class="parent-chip"><?= e($m['parent_mid']) ?></span>
-                            <small class="d-block muted">
-                                <?= e($m['parent_name']) ?>
-                                <?php if ($m['position']): ?>
-                                    · <strong class="pos-<?= e($m['position']) ?>"><?= strtoupper(e($m['position'])) ?></strong>
-                                <?php endif; ?>
-                            </small>
-                        <?php else: ?>
-                            <span class="muted">Root</span>
                         <?php endif; ?>
                     </td>
                     <td>
                         <?php if ($m['package_name']): ?>
                             <span class="pkg-chip"><?= e($m['package_name']) ?></span>
                         <?php else: ?>
-                            <span class="muted">—</span>
+                            <span class="muted">No package</span>
                         <?php endif; ?>
                     </td>
-                    <td>
-                        <div class="lr-pills">
-                            <span class="lr left">L <?= (int) $m['left_count'] ?></span>
-                            <span class="lr right">R <?= (int) $m['right_count'] ?></span>
-                        </div>
-                    </td>
-                    <td><strong class="wallet-amt"><?= currency((float) $m['wallet_balance']) ?></strong></td>
                     <td><span class="badge badge-<?= e($m['status']) ?>"><?= e($m['status']) ?></span></td>
-                    <td><span class="muted"><?= date('d M Y', strtotime($m['join_date'])) ?></span></td>
+                    <td><span class="muted"><?= !empty($m['join_date']) ? date('d M Y', strtotime((string) $m['join_date'])) : '—' ?></span></td>
                     <td>
                         <div class="action-icons" style="justify-content:flex-end">
-                            <a href="member-view.php?id=<?= (int) $m['id'] ?>" class="btn-icon btn-icon-view" title="View"><?= icon_svg('view') ?></a>
-                            <a href="tree-view.php?root=<?= (int) $m['id'] ?>" class="btn-icon" title="Tree View"><?= icon_svg('package') ?></a>
+                            <a href="member-view.php?id=<?= (int) $m['id'] ?>" class="btn-icon btn-icon-view" title="View details"><?= icon_svg('view') ?></a>
+                            <a href="member-edit.php?id=<?= (int) $m['id'] ?>" class="btn-icon" title="Edit"><?= icon_svg('edit') ?></a>
                             <?php if ($m['status'] === 'active'): ?>
                                 <?= action_toggle('?action=deactivate&id=' . (int) $m['id'], 'active') ?>
                             <?php else: ?>

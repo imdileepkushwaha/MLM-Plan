@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../includes/closing.php';
 $pageTitle = 'Dashboard';
 require_once __DIR__ . '/../includes/header.php';
 
@@ -13,6 +14,21 @@ $todayJoins = (int) $pdo->query("SELECT COUNT(*) FROM members WHERE DATE(join_da
 $walletTotal = (float) $pdo->query("SELECT COALESCE(SUM(wallet_balance),0) FROM members")->fetchColumn();
 $newsCount = (int) $pdo->query("SELECT COUNT(*) FROM news WHERE status = 'active'")->fetchColumn();
 $pendingComm = (int) $pdo->query("SELECT COUNT(*) FROM commissions WHERE status = 'pending'")->fetchColumn();
+
+$closingSummary = ['eligible_members' => 0, 'pairs' => 0, 'matched_bv' => 0, 'est_binary_gross' => 0];
+try {
+    closing_ensure_tables($pdo);
+    $closingSummary = closing_open_pair_summary($pdo);
+} catch (Throwable $e) {
+    // ignore
+}
+
+$lastClosing = null;
+try {
+    $lastClosing = $pdo->query('SELECT * FROM closing_runs ORDER BY id DESC LIMIT 1')->fetch() ?: null;
+} catch (Throwable $e) {
+    $lastClosing = null;
+}
 
 $recentMembers = $pdo->query("
     SELECT m.*, p.name AS package_name
@@ -88,7 +104,34 @@ $iconOut = '<svg viewBox="0 0 24 24"><polyline points="17 1 21 5 17 9"/><path d=
         <div class="label">Active Packages</div>
         <a class="more" href="packages.php">More info →</a>
     </div>
+    <div class="stat-card g-cyan">
+        <div class="bg-icon"><?= $iconCheck ?></div>
+        <div class="value"><?= number_format((float) $closingSummary['pairs'], 1) ?></div>
+        <div class="label">Open Binary Pairs</div>
+        <a class="more" href="binary-closing.php">Close now →</a>
+    </div>
+    <div class="stat-card g-mint">
+        <div class="bg-icon"><?= $iconMoney ?></div>
+        <div class="value"><?= currency((float) $closingSummary['est_binary_gross']) ?></div>
+        <div class="label">Est. Binary Gross</div>
+        <a class="more" href="binary-closing.php">Preview →</a>
+    </div>
 </div>
+
+<?php if ($lastClosing): ?>
+<div class="panel" style="margin-bottom:1.25rem">
+    <div class="panel-body" style="display:flex;flex-wrap:wrap;gap:1rem;align-items:center;justify-content:space-between">
+        <div>
+            <strong>Last closing #<?= (int) $lastClosing['id'] ?></strong>
+            <span class="muted"> · <?= e(date('d M Y H:i', strtotime((string) $lastClosing['created_at']))) ?></span>
+            <div class="muted" style="margin-top:0.35rem;font-size:0.85rem">
+                Paid <?= (int) $lastClosing['members_paid'] ?> · Binary net <?= currency((float) $lastClosing['binary_net_total']) ?> · Matching <?= currency((float) $lastClosing['matching_total']) ?>
+            </div>
+        </div>
+        <a class="btn btn-outline btn-sm" href="binary-closing.php?run=<?= (int) $lastClosing['id'] ?>">View closing</a>
+    </div>
+</div>
+<?php endif; ?>
 
 <div class="dash-bottom">
     <div class="summary-stack">
@@ -159,7 +202,9 @@ $iconOut = '<svg viewBox="0 0 24 24"><polyline points="17 1 21 5 17 9"/><path d=
 
     <div class="panel" style="margin:0">
         <div class="panel-header">
-            <h2>Recent Members</h2>
+            <div>
+                <h2>Recent Members</h2>
+            </div>
             <a href="members.php" class="btn btn-outline btn-sm">View all</a>
         </div>
         <div class="table-wrap">
@@ -193,7 +238,9 @@ $iconOut = '<svg viewBox="0 0 24 24"><polyline points="17 1 21 5 17 9"/><path d=
 
 <div class="panel">
     <div class="panel-header">
-        <h2>Recent Commissions</h2>
+        <div>
+            <h2>Recent Commissions</h2>
+        </div>
         <a href="commissions.php" class="btn btn-outline btn-sm">View all</a>
     </div>
     <div class="table-wrap">

@@ -1,7 +1,67 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/procedures.php';
+require_once __DIR__ . '/../includes/withdrawal.php';
 $pageTitle = 'Withdrawals';
+
+wd_ensure_columns($pdo);
+
+if (isset($_GET['export']) && $_GET['export'] === 'csv') {
+    $status = $_GET['status'] ?? 'approved';
+    if (!in_array($status, ['pending', 'approved', 'rejected', 'paid', 'payout'], true)) {
+        $status = 'approved';
+    }
+    $where = '1=1';
+    $params = [];
+    if ($status === 'payout') {
+        $where = "w.status IN ('approved','paid')";
+    } else {
+        $where = 'w.status = ?';
+        $params[] = $status;
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT w.*, m.full_name, m.member_id AS mid, m.email, m.phone
+        FROM withdrawals w
+        JOIN members m ON m.id = w.member_id
+        WHERE $where
+        ORDER BY w.id ASC
+    ");
+    $stmt->execute($params);
+    $rows = $stmt->fetchAll();
+
+    $filename = 'withdrawals-' . $status . '-' . date('Ymd-His') . '.csv';
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+    $out = fopen('php://output', 'w');
+    fprintf($out, chr(0xEF) . chr(0xBB) . chr(0xBF));
+    fputcsv($out, [
+        'ID', 'Member ID', 'Name', 'Email', 'Phone', 'Gross', 'TDS', 'Fee', 'Other Deduction',
+        'Net Payout', 'Method', 'Account Details', 'Status', 'Requested', 'Processed', 'Admin Note',
+    ]);
+    foreach ($rows as $r) {
+        fputcsv($out, [
+            (int) $r['id'],
+            $r['mid'],
+            $r['full_name'],
+            $r['email'] ?? '',
+            $r['phone'] ?? '',
+            number_format((float) $r['amount'], 2, '.', ''),
+            number_format((float) ($r['tds_amount'] ?? 0), 2, '.', ''),
+            number_format((float) ($r['fee_amount'] ?? 0), 2, '.', ''),
+            number_format((float) ($r['other_deduction'] ?? 0), 2, '.', ''),
+            number_format(wd_net_display($r), 2, '.', ''),
+            $r['payment_method'] ?? '',
+            preg_replace("/\r\n|\r|\n/", ' | ', (string) ($r['account_details'] ?? '')),
+            $r['status'],
+            $r['requested_at'] ?? '',
+            $r['processed_at'] ?? '',
+            $r['admin_note'] ?? '',
+        ]);
+    }
+    fclose($out);
+    exit;
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $id = (int) ($_POST['id'] ?? 0);
@@ -21,13 +81,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } elseif ($sp['message'] !== 'Procedure unavailable' && !$sp['ok']) {
                 flash('error', $sp['message']);
             } else {
-                // PHP fallback
-                $pdo->prepare("UPDATE withdrawals SET status = 'approved', admin_note = ?, processed_at = NOW() WHERE id = ?")
-                    ->execute([$note, $id]);
-                $pdo->prepare('UPDATE members SET wallet_balance = wallet_balance - ? WHERE id = ? AND wallet_balance >= ?')
-                    ->execute([(float) $wd['amount'], (int) $wd['member_id'], (float) $wd['amount']]);
-                log_activity('withdrawal_approve', "Approved withdrawal #$id");
-                flash('success', 'Withdrawal approved. Wallet deducted.');
+                try {
+                    $pdo->beginTransaction();
+                    $upd = $pdo->prepare("UPDATE withdrawals SET status = 'approved', admin_note = ?, processed_at = NOW() WHERE id = ? AND status = 'pending'");
+                    $upd->execute([$note, $id]);
+                    if ($upd->rowCount() < 1) {
+                        $pdo->rollBack();
+                        flash('error', 'Withdrawal is not pending.');
+                    } else {
+                        $ded = $pdo->prepare('UPDATE members SET wallet_balance = wallet_balance - ? WHERE id = ? AND wallet_balance >= ?');
+                        $ded->execute([(float) $wd['amount'], (int) $wd['member_id'], (float) $wd['amount']]);
+                        if ($ded->rowCount() < 1) {
+                            $pdo->rollBack();
+                            flash('error', 'Insufficient wallet balance.');
+                        } else {
+                            $pdo->commit();
+                            log_activity('withdrawal_approve', "Approved withdrawal #$id");
+                            flash('success', 'Withdrawal approved. Wallet deducted. Pay net ' . strip_tags(currency(wd_net_display($wd))) . '.');
+                        }
+                    }
+                } catch (Throwable $e) {
+                    if ($pdo->inTransaction()) {
+                        $pdo->rollBack();
+                    }
+                    flash('error', 'Approval failed.');
+                }
             }
         } elseif ($action === 'reject') {
             $sp = sp_call_reject_withdrawal($pdo, $id, $note);
@@ -37,44 +115,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } elseif ($sp['message'] !== 'Procedure unavailable' && !$sp['ok']) {
                 flash('error', $sp['message']);
             } else {
-                $pdo->prepare("UPDATE withdrawals SET status = 'rejected', admin_note = ?, processed_at = NOW() WHERE id = ?")
+                $pdo->prepare("UPDATE withdrawals SET status = 'rejected', admin_note = ?, processed_at = NOW() WHERE id = ? AND status = 'pending'")
                     ->execute([$note, $id]);
                 log_activity('withdrawal_reject', "Rejected withdrawal #$id");
                 flash('success', 'Withdrawal rejected.');
             }
         } elseif ($action === 'paid') {
-            $pdo->prepare("UPDATE withdrawals SET status = 'paid', admin_note = ?, processed_at = NOW() WHERE id = ?")
-                ->execute([$note, $id]);
-            flash('success', 'Marked as paid.');
+            flash('error', 'Approve the withdrawal first, then mark it paid.');
         }
     }
 
-    // Allow marking approved -> paid
+    // Only approved → paid (never pending → paid)
     if ($wd && $wd['status'] === 'approved' && $action === 'paid') {
-        $pdo->prepare("UPDATE withdrawals SET status = 'paid', admin_note = ?, processed_at = NOW() WHERE id = ?")
-            ->execute([$note, $id]);
-        flash('success', 'Marked as paid.');
+        $pdo->prepare("UPDATE withdrawals SET status = 'paid', admin_note = ?, processed_at = NOW() WHERE id = ? AND status = 'approved'")
+            ->execute([$note !== '' ? $note : ($wd['admin_note'] ?? null), $id]);
+        log_activity('withdrawal_paid', "Marked withdrawal #$id paid");
+        flash('success', 'Marked as paid. Net remitted: ' . strip_tags(currency(wd_net_display($wd))) . '.');
     }
 
-    header('Location: withdrawals.php');
-    exit;
-}
-
-// Quick create sample withdrawal for testing (admin tool)
-if (isset($_GET['create_test']) && isset($_GET['member_id'])) {
-    $mid = (int) $_GET['member_id'];
-    $amt = (float) ($_GET['amount'] ?? 500);
-    $m = $pdo->prepare('SELECT wallet_balance FROM members WHERE id = ?');
-    $m->execute([$mid]);
-    $mem = $m->fetch();
-    if ($mem && (float)$mem['wallet_balance'] >= $amt) {
-        $pdo->prepare('INSERT INTO withdrawals (member_id, amount, payment_method, account_details, status) VALUES (?,?,?,?,?)')
-            ->execute([$mid, $amt, 'Bank Transfer', 'Test account', 'pending']);
-        flash('success', 'Test withdrawal request created.');
-    } else {
-        flash('error', 'Insufficient wallet balance.');
+    $redir = 'withdrawals.php';
+    if (!empty($_GET['status'])) {
+        $redir .= '?status=' . urlencode((string) $_GET['status']);
     }
-    header('Location: withdrawals.php');
+    header('Location: ' . $redir);
     exit;
 }
 
@@ -109,17 +172,29 @@ $rows = $stmt->fetchAll();
 
 $pendingCount = (int) $pdo->query("SELECT COUNT(*) FROM withdrawals WHERE status = 'pending'")->fetchColumn();
 $pendingSum = (float) $pdo->query("SELECT COALESCE(SUM(amount),0) FROM withdrawals WHERE status = 'pending'")->fetchColumn();
+$approvedCount = (int) $pdo->query("SELECT COUNT(*) FROM withdrawals WHERE status = 'approved'")->fetchColumn();
+$approvedNet = (float) $pdo->query("SELECT COALESCE(SUM(COALESCE(net_amount, amount)),0) FROM withdrawals WHERE status = 'approved'")->fetchColumn();
+$tdsTotal = (float) $pdo->query("SELECT COALESCE(SUM(tds_amount),0) FROM withdrawals WHERE status IN ('approved','paid')")->fetchColumn();
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="stats-grid">
     <div class="stat-card accent"><div class="label">Pending Requests</div><div class="value"><?= $pendingCount ?></div></div>
-    <div class="stat-card"><div class="label">Pending Amount</div><div class="value"><?= currency($pendingSum) ?></div></div>
+    <div class="stat-card"><div class="label">Pending Gross</div><div class="value"><?= currency($pendingSum) ?></div></div>
+    <div class="stat-card"><div class="label">Approved (pay net)</div><div class="value"><?= currency($approvedNet) ?> <small style="font-size:0.7rem;font-weight:600;color:#8392ab"><?= $approvedCount ?> req</small></div></div>
+    <div class="stat-card"><div class="label">TDS Collected</div><div class="value"><?= currency($tdsTotal) ?></div></div>
 </div>
 
 <div class="panel">
-    <div class="panel-header"><h2>Withdrawals (<?= $total ?>)</h2></div>
+    <div class="panel-header" style="display:flex;flex-wrap:wrap;gap:0.75rem;align-items:center;justify-content:space-between">
+        <h2>Withdrawals (<?= $total ?>)</h2>
+        <div style="display:flex;flex-wrap:wrap;gap:0.5rem">
+            <a class="btn btn-outline btn-sm" href="tds-report.php">TDS Report</a>
+            <a class="btn btn-outline btn-sm" href="?export=csv&status=payout">Export payout CSV</a>
+            <a class="btn btn-primary btn-sm" href="?export=csv&status=<?= urlencode($statusFilter !== '' ? $statusFilter : 'approved') ?>">Export filtered CSV</a>
+        </div>
+    </div>
     <div class="panel-body">
         <form class="filters" method="get">
             <div class="form-group">
@@ -133,6 +208,7 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
             <button type="submit" class="btn btn-primary">Filter</button>
         </form>
+        <p class="muted" style="margin:0.75rem 0 0;font-size:0.85rem">Wallet deducts <strong>gross</strong> on approve. Remit <strong>net</strong> to member. Pending cannot be marked paid.</p>
     </div>
     <div class="table-wrap">
         <table class="data">
@@ -140,7 +216,9 @@ require_once __DIR__ . '/../includes/header.php';
                 <tr>
                     <th>ID</th>
                     <th>Member</th>
-                    <th>Amount</th>
+                    <th>Gross</th>
+                    <th>TDS / Fee</th>
+                    <th>Net payout</th>
                     <th>Method</th>
                     <th>Account</th>
                     <th>Status</th>
@@ -150,7 +228,7 @@ require_once __DIR__ . '/../includes/header.php';
             </thead>
             <tbody>
             <?php if (!$rows): ?>
-                <tr><td colspan="8">No withdrawal requests.</td></tr>
+                <tr><td colspan="10">No withdrawal requests.</td></tr>
             <?php else: foreach ($rows as $r): ?>
                 <tr>
                     <td>#<?= (int)$r['id'] ?></td>
@@ -159,22 +237,29 @@ require_once __DIR__ . '/../includes/header.php';
                         <small><?= e($r['mid']) ?> · Wallet: <?= currency((float)$r['wallet_balance']) ?></small>
                     </td>
                     <td><strong><?= currency((float)$r['amount']) ?></strong></td>
+                    <td>
+                        <small>
+                            TDS <?= currency((float)($r['tds_amount'] ?? 0)) ?><br>
+                            Fee <?= currency((float)($r['fee_amount'] ?? 0) + (float)($r['other_deduction'] ?? 0)) ?>
+                        </small>
+                    </td>
+                    <td><strong class="rpt-amt"><?= currency(wd_net_display($r)) ?></strong></td>
                     <td><?= e($r['payment_method'] ?? '—') ?></td>
                     <td style="max-width:160px;font-size:0.8rem"><?= e($r['account_details'] ?? '—') ?></td>
                     <td><span class="badge badge-<?= e($r['status']) ?>"><?= e($r['status']) ?></span></td>
                     <td><?= date('d M Y H:i', strtotime($r['requested_at'])) ?></td>
                     <td>
                         <?php if ($r['status'] === 'pending'): ?>
-                        <form method="post" style="display:inline-flex;gap:0.35rem;flex-wrap:wrap">
+                        <form method="post" class="action-icons" style="flex-wrap:nowrap">
                             <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
                             <input type="text" name="admin_note" placeholder="Note" style="width:90px;padding:0.3rem;font-size:0.8rem;border:1px solid var(--border);border-radius:6px">
-                            <button name="action" value="approve" class="btn btn-success btn-sm" data-confirm="Approve and deduct wallet?">Approve</button>
-                            <button name="action" value="reject" class="btn btn-danger btn-sm" data-confirm="Reject this request?">Reject</button>
+                            <?= action_approve_btn('Approve and deduct gross from wallet?') ?>
+                            <?= action_reject_btn('Reject this request?') ?>
                         </form>
                         <?php elseif ($r['status'] === 'approved'): ?>
-                        <form method="post" style="display:inline">
+                        <form method="post" class="action-icons">
                             <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
-                            <button name="action" value="paid" class="btn btn-primary btn-sm">Mark Paid</button>
+                            <?= action_paid_btn('Confirm bank remittance of net amount?') ?>
                         </form>
                         <?php else: ?>
                         <small><?= e($r['admin_note'] ?? '') ?></small>

@@ -43,6 +43,26 @@ if (isset($_GET['pay'])) {
     exit;
 }
 
+// Cancel (clawback wallet if already paid)
+if (isset($_GET['cancel'])) {
+    $id = (int) $_GET['cancel'];
+    $stmt = $pdo->prepare('SELECT * FROM commissions WHERE id = ? AND status IN (?, ?)');
+    $stmt->execute([$id, 'pending', 'paid']);
+    $c = $stmt->fetch();
+    if ($c) {
+        $pdo->prepare("UPDATE commissions SET status = 'cancelled' WHERE id = ?")->execute([$id]);
+        if ($c['status'] === 'paid') {
+            $amt = (float) $c['amount'];
+            $pdo->prepare('UPDATE members SET wallet_balance = GREATEST(0, wallet_balance - ?), total_earnings = GREATEST(0, total_earnings - ?) WHERE id = ?')
+                ->execute([$amt, $amt, (int) $c['member_id']]);
+        }
+        log_activity('commission_cancel', "Cancelled commission #$id");
+        flash('success', 'Commission cancelled' . ($c['status'] === 'paid' ? ' and wallet adjusted.' : '.'));
+    }
+    header('Location: commissions.php');
+    exit;
+}
+
 $typeFilter = $_GET['type'] ?? '';
 $statusFilter = $_GET['status'] ?? '';
 $page = max(1, (int) ($_GET['page'] ?? 1));
@@ -174,9 +194,14 @@ require_once __DIR__ . '/../includes/header.php';
                     <td><span class="badge badge-<?= e($r['status']) ?>"><?= e($r['status']) ?></span></td>
                     <td><?= date('d M Y H:i', strtotime($r['created_at'])) ?></td>
                     <td>
+                        <div class="action-icons">
                         <?php if ($r['status'] === 'pending'): ?>
-                        <a href="?pay=<?= (int)$r['id'] ?>" class="btn btn-success btn-sm" data-confirm="Mark as paid and credit wallet?">Pay</a>
+                        <a href="?pay=<?= (int)$r['id'] ?>" class="btn-icon btn-icon-paid" title="Pay" aria-label="Pay" data-confirm="Mark as paid and credit wallet?"><?= icon_svg('paid') ?></a>
+                        <a href="?cancel=<?= (int)$r['id'] ?>" class="btn-icon btn-icon-reject" title="Cancel" aria-label="Cancel" data-confirm="Cancel this pending commission?"><?= icon_svg('x') ?></a>
+                        <?php elseif ($r['status'] === 'paid'): ?>
+                        <a href="?cancel=<?= (int)$r['id'] ?>" class="btn-icon btn-icon-reject" title="Cancel / clawback" aria-label="Cancel" data-confirm="Cancel and claw back from wallet?"><?= icon_svg('x') ?></a>
                         <?php endif; ?>
+                        </div>
                     </td>
                 </tr>
             <?php endforeach; endif; ?>

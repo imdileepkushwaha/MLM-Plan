@@ -37,6 +37,14 @@ try {
 } catch (Throwable $e) {
     $recent = [];
 }
+
+$needsActivation = empty($user['package_id']);
+$canUpgrade = !$needsActivation && activation_can_upgrade($pdo, $user);
+$upgradePending = false;
+if (!$needsActivation) {
+    $upPending = activation_pending_request($pdo, (int) $user['id']);
+    $upgradePending = $upPending && (($upPending['request_type'] ?? '') === 'upgrade');
+}
 ?>
 <div class="up-page-head">
     <div>
@@ -136,9 +144,19 @@ try {
                 <tr>
                     <td colspan="6">
                         <div class="inc-empty">
-                            <strong>No income records yet</strong>
-                            <p>Activate your plan and grow your team to start earning.</p>
-                            <a href="activate.php" class="up-btn up-btn-primary">Activate Account</a>
+                            <?php if ($needsActivation): ?>
+                                <strong>No income records yet</strong>
+                                <p>Activate your plan and grow your team to start earning.</p>
+                                <a href="activate.php" class="up-btn up-btn-primary">Activate Account</a>
+                            <?php elseif ($canUpgrade || $upgradePending): ?>
+                                <strong>No income records yet</strong>
+                                <p>Grow your team to earn — or upgrade your plan (pay only the difference) to unlock a higher package.</p>
+                                <a href="activate.php" class="up-btn up-btn-primary"><?= $upgradePending ? 'View Upgrade' : 'Upgrade Plan' ?></a>
+                            <?php else: ?>
+                                <strong>No income records yet</strong>
+                                <p>Share your referral links and grow your team to start earning.</p>
+                                <a href="my-direct.php" class="up-btn up-btn-primary">View Directs</a>
+                            <?php endif; ?>
                         </div>
                     </td>
                 </tr>

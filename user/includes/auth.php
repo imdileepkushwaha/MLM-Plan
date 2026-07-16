@@ -10,6 +10,15 @@ function require_user(): void
         header('Location: login.php');
         exit;
     }
+
+    // Maintenance: kick logged-in members immediately
+    if (is_maintenance_mode()) {
+        user_logout_session();
+        flash('error', 'Portal is under maintenance. You have been signed out. Please try again later.');
+        header('Location: login.php');
+        exit;
+    }
+
     session_enforce_idle('user', 'login.php');
 }
 

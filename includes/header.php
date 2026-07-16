@@ -14,7 +14,7 @@ $utilityPages = [
 $utilityOpen = in_array($currentPage, $utilityPages, true);
 
 $memberPages = [
-    'members', 'member-view', 'member-add',
+    'members', 'member-view', 'member-add', 'member-edit',
     'approve-kyc', 'tree-view', 'binary-tree', 'downline',
 ];
 $membersOpen = in_array($currentPage, $memberPages, true);
@@ -27,11 +27,19 @@ $productPages = [
 $productOpen = in_array($currentPage, $productPages, true);
 
 $notifyCount = 0;
+$actNotifyCount = 0;
 try {
     $notifyCount = (int) $pdo->query("SELECT COUNT(*) FROM withdrawals WHERE status = 'pending'")->fetchColumn();
 } catch (Throwable $e) {
     $notifyCount = 0;
 }
+try {
+    require_once __DIR__ . '/activation.php';
+    $actNotifyCount = activation_pending_count($pdo);
+} catch (Throwable $e) {
+    $actNotifyCount = 0;
+}
+$totalNotifyCount = $notifyCount + $actNotifyCount;
 $adminUsername = $_SESSION['admin_username'] ?? 'admin';
 
 function nav_ico(string $svg): string
@@ -99,7 +107,7 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
                         <?= $chevronDown ?>
                     </button>
                     <div class="nav-submenu">
-                        <a href="members.php" class="<?= in_array($currentPage, ['members', 'member-view', 'member-add'], true) ? 'active' : '' ?>"><span class="dot"></span>Member List</a>
+                        <a href="members.php" class="<?= in_array($currentPage, ['members', 'member-view', 'member-add', 'member-edit'], true) ? 'active' : '' ?>"><span class="dot"></span>Member List</a>
                         <a href="approve-kyc.php" class="<?= $currentPage === 'approve-kyc' ? 'active' : '' ?>"><span class="dot"></span>Approve KYC</a>
                         <a href="tree-view.php" class="<?= in_array($currentPage, ['tree-view', 'binary-tree'], true) ? 'active' : '' ?>"><span class="dot"></span>Tree View</a>
                         <a href="downline.php" class="<?= $currentPage === 'downline' ? 'active' : '' ?>"><span class="dot"></span>Downline</a>
@@ -169,6 +177,16 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
                     <?= $chevronDown ?>
                 </a>
 
+                <a href="activations.php" class="nav-link <?= $currentPage === 'activations' ? 'active' : '' ?>">
+                    <span class="nav-link-left">
+                        <?= nav_ico($icoPkg) ?>
+                        <span class="nav-label">Activations</span>
+                    </span>
+                    <?php if ($actNotifyCount > 0): ?>
+                    <span class="nav-badge"><?= $actNotifyCount > 9 ? '9+' : $actNotifyCount ?></span>
+                    <?php endif; ?>
+                </a>
+
                 <a href="commissions.php" class="nav-link <?= $currentPage === 'commissions' ? 'active' : '' ?>">
                     <span class="nav-link-left">
                         <?= nav_ico($icoMoney) ?>
@@ -176,7 +194,14 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
                     </span>
                 </a>
 
-                <a href="withdrawals.php" class="nav-link <?= $currentPage === 'withdrawals' ? 'active' : '' ?>">
+                <a href="binary-closing.php" class="nav-link <?= $currentPage === 'binary-closing' ? 'active' : '' ?>">
+                    <span class="nav-link-left">
+                        <?= nav_ico($icoTree) ?>
+                        <span class="nav-label">Binary Closing</span>
+                    </span>
+                </a>
+
+                <a href="withdrawals.php" class="nav-link <?= in_array($currentPage, ['withdrawals', 'tds-report'], true) ? 'active' : '' ?>">
                     <span class="nav-link-left">
                         <?= nav_ico($icoCard) ?>
                         <span class="nav-label">Withdrawals</span>
@@ -223,12 +248,22 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
                 <div class="topbar-dropdown" data-dropdown>
                     <button type="button" class="topbar-btn" data-dropdown-toggle title="Notifications" aria-label="Notifications" aria-expanded="false">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
-                        <?php if ($notifyCount > 0): ?>
-                        <span class="notify-badge"><?= $notifyCount > 9 ? '9+' : $notifyCount ?></span>
+                        <?php if ($totalNotifyCount > 0): ?>
+                        <span class="notify-badge"><?= $totalNotifyCount > 9 ? '9+' : $totalNotifyCount ?></span>
                         <?php endif; ?>
                     </button>
                     <div class="dropdown-menu dropdown-notify" data-dropdown-menu>
                         <div class="dropdown-head">Notifications</div>
+                        <?php if ($totalNotifyCount > 0): ?>
+                        <?php if ($actNotifyCount > 0): ?>
+                        <a href="activations.php?status=pending" class="dropdown-item">
+                            <span class="ni red"></span>
+                            <div>
+                                <strong><?= $actNotifyCount ?> pending activation<?= $actNotifyCount > 1 ? 's' : '' ?></strong>
+                                <small>Verify UTR &amp; approve</small>
+                            </div>
+                        </a>
+                        <?php endif; ?>
                         <?php if ($notifyCount > 0): ?>
                         <a href="withdrawals.php?status=pending" class="dropdown-item">
                             <span class="ni red"></span>
@@ -237,10 +272,11 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
                                 <small>Action required</small>
                             </div>
                         </a>
+                        <?php endif; ?>
                         <?php else: ?>
                         <div class="dropdown-empty">No new notifications</div>
                         <?php endif; ?>
-                        <a href="withdrawals.php" class="dropdown-foot">View all withdrawals</a>
+                        <a href="activations.php?status=pending" class="dropdown-foot">View activations</a>
                     </div>
                 </div>
 

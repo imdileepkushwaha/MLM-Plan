@@ -1,5 +1,7 @@
 <?php
 $pageTitle = 'Dashboard';
+require_once __DIR__ . '/../includes/closing.php';
+require_once __DIR__ . '/../includes/activation.php';
 require_once __DIR__ . '/includes/header.php';
 
 $directCount = 0;
@@ -20,6 +22,30 @@ $waRightText = 'Join with my Right referral link (' . $memberCode . '): ' . $ref
 $waLeftUrl = 'https://wa.me/?text=' . rawurlencode($waLeftText);
 $waRightUrl = 'https://wa.me/?text=' . rawurlencode($waRightText);
 $needsActivation = empty($user['package_id']);
+$actPending = activation_pending_request($pdo, (int) $user['id']);
+$canUpgrade = !$needsActivation && activation_can_upgrade($pdo, $user);
+$upgradePending = $actPending && (($actPending['request_type'] ?? '') === 'upgrade');
+$showUpgradeCta = $canUpgrade || $upgradePending;
+
+$leftBv = (float) ($user['left_bv'] ?? 0);
+$rightBv = (float) ($user['right_bv'] ?? 0);
+$pairBv = closing_pair_bv();
+$flush = max(0, (int) setting('binary_flush_pairs', '0'));
+$openMatch = closing_compute_match($leftBv, $rightBv, $pairBv, $flush);
+$openPairs = (float) ($openMatch['pairs'] ?? 0);
+
+$newsItems = [];
+try {
+    $newsItems = $pdo->query("
+        SELECT title, content, published_at
+        FROM news
+        WHERE status = 'active'
+        ORDER BY COALESCE(published_at, '1970-01-01') DESC, id DESC
+        LIMIT 6
+    ")->fetchAll();
+} catch (Throwable $e) {
+    $newsItems = [];
+}
 ?>
 <div class="up-page-head">
     <div>
@@ -27,7 +53,9 @@ $needsActivation = empty($user['package_id']);
         <p>Overview of your wallet, team and account status.</p>
     </div>
     <?php if ($needsActivation): ?>
-        <a href="activate.php" class="up-btn up-btn-primary">Activate Account</a>
+        <a href="activate.php" class="up-btn up-btn-primary"><?= $actPending ? 'View Request' : 'Activate Account' ?></a>
+    <?php elseif ($showUpgradeCta): ?>
+        <a href="activate.php" class="up-btn up-btn-primary"><?= $upgradePending ? 'View Upgrade' : 'Upgrade Plan' ?></a>
     <?php else: ?>
         <a href="edit-profile.php" class="up-btn up-btn-primary">Edit Profile</a>
     <?php endif; ?>
@@ -36,11 +64,13 @@ $needsActivation = empty($user['package_id']);
 <?php if ($needsActivation): ?>
 <section class="up-activate-banner">
     <div class="up-activate-copy">
-        <span class="up-activate-kicker">Action required</span>
-        <h2>Activate your account</h2>
-        <p>You have not selected a plan yet. Activate a package to go live and unlock team &amp; earnings features.</p>
+        <span class="up-activate-kicker"><?= $actPending ? 'Pending approval' : 'Action required' ?></span>
+        <h2><?= $actPending ? 'Activation under review' : 'Activate your account' ?></h2>
+        <p><?= $actPending
+            ? 'Your payment proof is with admin. You will go live once the UTR is verified.'
+            : 'Pay for a package, submit your UTR, and unlock team &amp; earnings features after admin approval.' ?></p>
         <div class="up-activate-actions">
-            <a href="activate.php" class="up-btn up-btn-primary">Activate Now</a>
+            <a href="activate.php" class="up-btn up-btn-primary"><?= $actPending ? 'View Request' : 'Activate Now' ?></a>
             <a href="profile.php" class="up-btn up-btn-outline up-activate-ghost">View Profile</a>
         </div>
     </div>
@@ -48,8 +78,29 @@ $needsActivation = empty($user['package_id']);
         <span class="up-activate-ico">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
         </span>
-        <strong>Inactive</strong>
-        <small>No package assigned</small>
+        <strong><?= $actPending ? 'Pending' : 'Inactive' ?></strong>
+        <small><?= $actPending ? 'Awaiting admin' : 'No package assigned' ?></small>
+    </div>
+</section>
+<?php elseif ($showUpgradeCta): ?>
+<section class="up-activate-banner">
+    <div class="up-activate-copy">
+        <span class="up-activate-kicker"><?= $upgradePending ? 'Pending approval' : 'Grow further' ?></span>
+        <h2><?= $upgradePending ? 'Upgrade under review' : 'Upgrade your plan' ?></h2>
+        <p><?= $upgradePending
+            ? 'Your difference payment is with admin. Your package will update after verification.'
+            : 'Move to a higher package and pay only the difference amount — not the full package price.' ?></p>
+        <div class="up-activate-actions">
+            <a href="activate.php" class="up-btn up-btn-primary"><?= $upgradePending ? 'View Request' : 'Upgrade Now' ?></a>
+            <a href="profile.php" class="up-btn up-btn-outline up-activate-ghost">View Profile</a>
+        </div>
+    </div>
+    <div class="up-activate-visual" aria-hidden="true">
+        <span class="up-activate-ico">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
+        </span>
+        <strong><?= $upgradePending ? 'Pending' : 'Upgrade' ?></strong>
+        <small><?= $upgradePending ? 'Awaiting admin' : 'Difference only' ?></small>
     </div>
 </section>
 <?php endif; ?>
@@ -113,11 +164,64 @@ $needsActivation = empty($user['package_id']);
                 <div class="up-stat-value is-sm"><?= e($user['package_name'] ?? ($needsActivation ? 'Not activated' : '—')) ?></div>
                 <div class="up-stat-foot">
                     <?php if ($needsActivation): ?>
-                        <a href="activate.php" style="color:inherit;font-weight:800;text-decoration:underline">Activate →</a>
+                        <a href="activate.php" style="color:inherit;font-weight:800;text-decoration:underline"><?= $actPending ? 'Pending →' : 'Activate →' ?></a>
+                    <?php elseif ($showUpgradeCta): ?>
+                        <a href="activate.php" style="color:inherit;font-weight:800;text-decoration:underline"><?= $upgradePending ? 'Pending →' : 'Upgrade →' ?></a>
                     <?php else: ?>
                         <span>plan</span> Active package
                     <?php endif; ?>
                 </div>
+            </div>
+        </div>
+    </article>
+</div>
+
+<div class="up-stats up-stats-bv">
+    <article class="up-stat g-mint">
+        <div class="up-stat-inner">
+            <span class="up-stat-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            </span>
+            <div class="up-stat-copy">
+                <div class="up-stat-label">Left BV</div>
+                <div class="up-stat-value"><?= number_format($leftBv, 0) ?></div>
+                <div class="up-stat-foot"><span>volume</span> Left leg</div>
+            </div>
+        </div>
+    </article>
+    <article class="up-stat g-coral">
+        <div class="up-stat-inner">
+            <span class="up-stat-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </span>
+            <div class="up-stat-copy">
+                <div class="up-stat-label">Right BV</div>
+                <div class="up-stat-value"><?= number_format($rightBv, 0) ?></div>
+                <div class="up-stat-foot"><span>volume</span> Right leg</div>
+            </div>
+        </div>
+    </article>
+    <article class="up-stat g-teal">
+        <div class="up-stat-inner">
+            <span class="up-stat-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 12h8M12 8v8"/></svg>
+            </span>
+            <div class="up-stat-copy">
+                <div class="up-stat-label">Open Pairs</div>
+                <div class="up-stat-value"><?= number_format($openPairs, $openPairs == floor($openPairs) ? 0 : 2) ?></div>
+                <div class="up-stat-foot"><span>match</span> BV <?= number_format((float) ($openMatch['matched_bv'] ?? 0), 0) ?></div>
+            </div>
+        </div>
+    </article>
+    <article class="up-stat g-slate">
+        <div class="up-stat-inner">
+            <span class="up-stat-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+            </span>
+            <div class="up-stat-copy">
+                <div class="up-stat-label">Pair Size</div>
+                <div class="up-stat-value"><?= number_format($pairBv, 0) ?></div>
+                <div class="up-stat-foot"><span>BV</span> Per pair</div>
             </div>
         </div>
     </article>
@@ -153,30 +257,44 @@ $needsActivation = empty($user['package_id']);
                 <strong>Password</strong>
                 <small>Secure login</small>
             </a>
-            <a href="profile.php" class="up-q-tile c4">
-                <span class="up-quick-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></span>
-                <strong>Settings</strong>
-                <small>Preferences</small>
-            </a>
-            <a href="income-summary.php" class="up-q-tile c5">
+            <a href="income-summary.php" class="up-q-tile c4">
                 <span class="up-quick-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3"/><path d="M9 13c6.667 0 6.667-10 0-10"/></svg></span>
                 <strong>Earnings</strong>
                 <small>Income view</small>
             </a>
-            <a href="index.php" class="up-q-tile c6">
+            <a href="my-treeview.php" class="up-q-tile c5">
                 <span class="up-quick-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><path d="M12 7v4M12 11L5 17M12 11l7 6"/></svg></span>
                 <strong>Team</strong>
                 <small>Binary tree</small>
             </a>
-            <a href="edit-profile.php" class="up-q-tile c7">
-                <span class="up-quick-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h16v16H4z"/><path d="M8 10h8M8 14h5"/></svg></span>
-                <strong>Details</strong>
-                <small>Your info</small>
+            <a href="withdrawal-fund.php" class="up-q-tile c6">
+                <span class="up-quick-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg></span>
+                <strong>Withdraw</strong>
+                <small>Request payout</small>
             </a>
-            <a href="logout.php" class="up-q-tile c8">
-                <span class="up-quick-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>
-                <strong>Logout</strong>
-                <small>Sign out</small>
+            <?php if ($needsActivation): ?>
+            <a href="activate.php" class="up-q-tile c7">
+                <span class="up-quick-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></span>
+                <strong>Activate</strong>
+                <small><?= $actPending ? 'View request' : 'Pay &amp; submit' ?></small>
+            </a>
+            <?php elseif ($showUpgradeCta): ?>
+            <a href="activate.php" class="up-q-tile c7">
+                <span class="up-quick-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg></span>
+                <strong>Upgrade</strong>
+                <small><?= $upgradePending ? 'View request' : 'Difference only' ?></small>
+            </a>
+            <?php else: ?>
+            <a href="my-direct.php" class="up-q-tile c7">
+                <span class="up-quick-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg></span>
+                <strong>Directs</strong>
+                <small>Your referrals</small>
+            </a>
+            <?php endif; ?>
+            <a href="support.php" class="up-q-tile c8">
+                <span class="up-quick-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></span>
+                <strong>Support</strong>
+                <small>Get help</small>
             </a>
         </div>
     </section>
@@ -223,12 +341,58 @@ $needsActivation = empty($user['package_id']);
             </div>
             <?php if ($needsActivation): ?>
                 <a href="activate.php" class="up-btn up-btn-primary up-btn-block">Activate Account →</a>
+            <?php elseif ($showUpgradeCta): ?>
+                <a href="activate.php" class="up-btn up-btn-primary up-btn-block"><?= $upgradePending ? 'View Upgrade →' : 'Upgrade Plan →' ?></a>
             <?php else: ?>
                 <a href="profile.php" class="up-btn up-btn-soft up-btn-block">Open profile →</a>
             <?php endif; ?>
         </div>
     </section>
 </div>
+
+<section class="up-card up-panel-card up-news-panel" aria-labelledby="newsTitle">
+    <div class="up-panel-head is-gold">
+        <div class="up-panel-head-main">
+            <span class="up-panel-head-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+            </span>
+            <div>
+                <span class="up-panel-kicker">Company updates</span>
+                <h2 id="newsTitle">Latest News</h2>
+                <p>Announcements and notices from the admin team.</p>
+            </div>
+        </div>
+        <?php if ($newsItems): ?>
+            <span class="up-news-count"><?= count($newsItems) ?> update<?= count($newsItems) === 1 ? '' : 's' ?></span>
+        <?php endif; ?>
+    </div>
+    <div class="up-news-body">
+        <?php if (!$newsItems): ?>
+            <div class="up-news-empty">
+                <span class="up-news-empty-ico" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                </span>
+                <strong>No news yet</strong>
+                <p>When admin publishes news, it will show up here.</p>
+            </div>
+        <?php else: ?>
+            <div class="up-news-list">
+                <?php foreach ($newsItems as $n): ?>
+                    <article class="up-news-item">
+                        <div class="up-news-item-top">
+                            <span class="up-news-dot" aria-hidden="true"></span>
+                            <strong><?= e($n['title']) ?></strong>
+                            <?php if (!empty($n['published_at'])): ?>
+                                <time datetime="<?= e($n['published_at']) ?>"><?= e(date('d M Y', strtotime((string) $n['published_at']))) ?></time>
+                            <?php endif; ?>
+                        </div>
+                        <p><?= nl2br(e($n['content'])) ?></p>
+                    </article>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+    </div>
+</section>
 
 <section class="up-card up-panel-card up-referral" aria-labelledby="referralTitle">
     <div class="up-panel-head is-coral">

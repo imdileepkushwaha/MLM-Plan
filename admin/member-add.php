@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/procedures.php';
+require_once __DIR__ . '/../includes/closing.php';
 $pageTitle = 'Add Member';
 
 $packages = $pdo->query("SELECT id, name, amount FROM packages WHERE status = 'active' ORDER BY amount")->fetchAll();
@@ -98,17 +99,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             updateUplineCounts($pdo, $placementId, $position);
         }
 
-        if ($sponsorId && $packageId) {
-            $pkg = $pdo->prepare('SELECT amount FROM packages WHERE id = ?');
+        if ($packageId) {
+            $pkg = $pdo->prepare('SELECT * FROM packages WHERE id = ?');
             $pkg->execute([$packageId]);
-            $amount = (float) ($pkg->fetch()['amount'] ?? 0);
-            $pct = (float) setting('referral_commission_percent', '5');
-            $comm = round($amount * $pct / 100, 2);
-            if ($comm > 0) {
-                $pdo->prepare('INSERT INTO commissions (member_id, from_member_id, type, amount, description, status) VALUES (?, ?, ?, ?, ?, ?)')
-                    ->execute([$sponsorId, $newId, 'referral', $comm, "Referral bonus from $memberCode", 'paid']);
-                $pdo->prepare('UPDATE members SET wallet_balance = wallet_balance + ?, total_earnings = total_earnings + ? WHERE id = ?')
-                    ->execute([$comm, $comm, $sponsorId]);
+            $pkgRow = $pkg->fetch();
+            if ($pkgRow) {
+                if ($sponsorId) {
+                    $amount = (float) ($pkgRow['amount'] ?? 0);
+                    $pct = (float) setting('referral_commission_percent', '5');
+                    $comm = round($amount * $pct / 100, 2);
+                    if ($comm > 0) {
+                        $pdo->prepare('INSERT INTO commissions (member_id, from_member_id, type, amount, description, status) VALUES (?, ?, ?, ?, ?, ?)')
+                            ->execute([$sponsorId, $newId, 'referral', $comm, "Referral bonus from $memberCode", 'paid']);
+                        $pdo->prepare('UPDATE members SET wallet_balance = wallet_balance + ?, total_earnings = total_earnings + ? WHERE id = ?')
+                            ->execute([$comm, $comm, $sponsorId]);
+                    }
+                }
+                closing_on_activation($pdo, [
+                    'id' => $newId,
+                    'member_id' => $memberCode,
+                    'sponsor_id' => $sponsorId,
+                ], $pkgRow);
             }
         }
 

@@ -42,7 +42,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $postTab = $_POST['tab'] ?? 'general';
     $postSub = $_POST['sub'] ?? 'binary';
     $keysByTab = [
-        'general' => ['company_name', 'support_email', 'maintenance_mode', 'currency', 'currency_symbol'],
+        'general' => [
+            'company_name',
+            'support_email',
+            'maintenance_mode',
+            'currency',
+            'currency_symbol',
+            'member_id_prefix',
+            'member_id_pad',
+        ],
         'withdrawal' => [
             'min_withdrawal',
             'processing_fee_percent',
@@ -73,7 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($postTab === 'commission') {
         if ($postSub === 'binary') {
-            foreach (['binary_commission_percent', 'referral_commission_percent', 'matching_commission_percent', 'binary_flush_pairs'] as $key) {
+            foreach (['binary_commission_percent', 'referral_commission_percent', 'matching_commission_percent', 'binary_flush_pairs', 'binary_pair_bv'] as $key) {
                 if (isset($_POST[$key])) {
                     $saveSetting($pdo, $key, trim((string) $_POST[$key]));
                 }
@@ -101,9 +109,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $saveSetting($pdo, 'contact_form_enabled', isset($_POST['contact_form_enabled']) ? '1' : '0');
     } else {
         $keys = $keysByTab[$postTab] ?? [];
+        $prevMaintenance = setting('maintenance_mode', 'off');
         foreach ($keys as $key) {
             if (isset($_POST[$key])) {
-                $saveSetting($pdo, $key, trim((string) $_POST[$key]));
+                $val = trim((string) $_POST[$key]);
+                if ($key === 'maintenance_mode') {
+                    $val = ($val === 'on') ? 'on' : 'off';
+                }
+                if ($key === 'member_id_prefix') {
+                    $val = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $val) ?? '');
+                    if ($val === '') {
+                        $val = 'MLM';
+                    }
+                    $val = substr($val, 0, 10);
+                }
+                if ($key === 'member_id_pad') {
+                    $val = (string) max(3, min(8, (int) $val));
+                }
+                $saveSetting($pdo, $key, $val);
+            }
+        }
+        clear_setting_cache();
+        if ($postTab === 'general' && isset($_POST['maintenance_mode'])) {
+            $newMode = ($_POST['maintenance_mode'] === 'on') ? 'on' : 'off';
+            if ($newMode === 'on' && $prevMaintenance !== 'on') {
+                $saveSetting($pdo, 'maintenance_started_at', date('Y-m-d H:i:s'));
+                clear_setting_cache('maintenance_started_at');
+                log_activity('maintenance_on', 'Maintenance mode enabled — member portal locked');
+                flash('success', 'Maintenance mode ON. Logged-in members will be signed out on their next request, and new logins are blocked.');
+                header('Location: settings.php?tab=general');
+                exit;
+            }
+            if ($newMode === 'off' && $prevMaintenance === 'on') {
+                log_activity('maintenance_off', 'Maintenance mode disabled — member portal open');
+                flash('success', 'Maintenance mode OFF. Members can sign in again.');
+                header('Location: settings.php?tab=general');
+                exit;
             }
         }
     }
@@ -142,6 +183,19 @@ $settings = [];
 $rows = $pdo->query('SELECT setting_key, setting_value FROM settings')->fetchAll();
 foreach ($rows as $r) {
     $settings[$r['setting_key']] = $r['setting_value'];
+}
+
+// Ensure member ID format settings exist
+foreach (['member_id_prefix' => 'MLM', 'member_id_pad' => '5'] as $k => $v) {
+    if (!isset($settings[$k])) {
+        try {
+            $pdo->prepare('INSERT INTO settings (setting_key, setting_value) VALUES (?, ?)')->execute([$k, $v]);
+            $settings[$k] = $v;
+            clear_setting_cache($k);
+        } catch (Throwable $e) {
+            $settings[$k] = $v;
+        }
+    }
 }
 
 $logs = $pdo->query("
@@ -267,6 +321,63 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
             </div>
 
+            <?php
+            $idPrefix = $settings['member_id_prefix'] ?? 'MLM';
+            $idPad = max(3, min(8, (int) ($settings['member_id_pad'] ?? 5)));
+            // Temporary preview using posted/current settings values
+            $previewPrefix = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string) $idPrefix) ?? '');
+            if ($previewPrefix === '') {
+                $previewPrefix = 'MLM';
+            }
+            $previewNext = 1;
+            try {
+                $pStmt = $pdo->prepare('SELECT member_id FROM members WHERE member_id LIKE ?');
+                $pStmt->execute([$previewPrefix . '%']);
+                $plen = strlen($previewPrefix);
+                foreach ($pStmt->fetchAll(PDO::FETCH_COLUMN) as $mid) {
+                    $suffix = substr((string) $mid, $plen);
+                    if ($suffix !== '' && ctype_digit($suffix)) {
+                        $previewNext = max($previewNext, (int) $suffix + 1);
+                    }
+                }
+            } catch (Throwable $e) {
+                $previewNext = 1;
+            }
+            $previewId = $previewPrefix . str_pad((string) $previewNext, $idPad, '0', STR_PAD_LEFT);
+            ?>
+            <div class="settings-section">
+                <div class="settings-section-head">
+                    <span class="ssh-ico orange">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    </span>
+                    <h3>Member ID Format</h3>
+                </div>
+                <div class="settings-fields two">
+                    <div class="form-group">
+                        <label for="member_id_prefix">ID Prefix</label>
+                        <input type="text" id="member_id_prefix" name="member_id_prefix" maxlength="10"
+                               value="<?= e($idPrefix) ?>"
+                               pattern="[A-Za-z0-9]+" title="Letters and numbers only"
+                               placeholder="MLM" required>
+                        <small class="field-hint">Used for new members only (e.g. MLM, ABC, GOLD). Existing IDs stay unchanged.</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="member_id_pad">Number Digits</label>
+                        <input type="number" id="member_id_pad" name="member_id_pad" min="3" max="8" step="1"
+                               value="<?= (int) $idPad ?>" required>
+                        <small class="field-hint">Padding length (3–8). Example with 5 → 00001</small>
+                    </div>
+                </div>
+                <div class="settings-info" style="margin-top:0.85rem">
+                    <span class="si-ico">i</span>
+                    <p>
+                        Next new member ID will look like
+                        <strong id="memberIdPreview"><?= e($previewId) ?></strong>
+                        (auto-increments per prefix).
+                    </p>
+                </div>
+            </div>
+
             <div class="settings-section">
                 <div class="settings-section-head">
                     <span class="ssh-ico green">
@@ -283,7 +394,7 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
                 <div class="settings-info">
                     <span class="si-ico">i</span>
-                    <p>When maintenance mode is on, members see a maintenance message and cannot sign in. Admin portal stays available.</p>
+                    <p>When ON: members are signed out on their next click, login/register stay blocked, and the admin panel remains available. Turn OFF to reopen the portal.</p>
                 </div>
             </div>
 
@@ -294,6 +405,24 @@ require_once __DIR__ . '/../includes/header.php';
                 </button>
             </div>
         </form>
+        <script>
+        (function () {
+            var prefix = document.getElementById('member_id_prefix');
+            var pad = document.getElementById('member_id_pad');
+            var preview = document.getElementById('memberIdPreview');
+            var nextNum = <?= (int) $previewNext ?>;
+            if (!prefix || !pad || !preview) return;
+            function refresh() {
+                var p = (prefix.value || 'MLM').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'MLM';
+                var d = Math.max(3, Math.min(8, parseInt(pad.value, 10) || 5));
+                var n = String(nextNum);
+                while (n.length < d) n = '0' + n;
+                preview.textContent = p + n;
+            }
+            prefix.addEventListener('input', refresh);
+            pad.addEventListener('input', refresh);
+        })();
+        </script>
 
         <?php elseif ($tab === 'commission'):
             $levelCount = max(1, min(20, (int) ($settings['level_income_levels'] ?? 10)));
@@ -347,24 +476,32 @@ require_once __DIR__ . '/../includes/header.php';
                         <div class="form-group">
                             <label>Binary Commission %</label>
                             <input type="number" step="0.01" min="0" name="binary_commission_percent" value="<?= e($settings['binary_commission_percent'] ?? '10') ?>">
+                            <small class="field-hint">% of matched BV paid as binary</small>
                         </div>
                         <div class="form-group">
                             <label>Referral Commission %</label>
                             <input type="number" step="0.01" min="0" name="referral_commission_percent" value="<?= e($settings['referral_commission_percent'] ?? '5') ?>">
+                            <small class="field-hint">% of package amount to sponsor on activation</small>
                         </div>
                         <div class="form-group">
                             <label>Matching Commission %</label>
                             <input type="number" step="0.01" min="0" name="matching_commission_percent" value="<?= e($settings['matching_commission_percent'] ?? '0') ?>">
+                            <small class="field-hint">% of downline binary (gross) to their sponsor</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Pair BV</label>
+                            <input type="number" step="0.01" min="0.01" name="binary_pair_bv" value="<?= e($settings['binary_pair_bv'] ?? '1000') ?>">
+                            <small class="field-hint">BV required on each leg to form 1 pair</small>
                         </div>
                         <div class="form-group">
                             <label>Flush After Pairs</label>
                             <input type="number" step="1" min="0" name="binary_flush_pairs" value="<?= e($settings['binary_flush_pairs'] ?? '0') ?>">
-                            <small class="field-hint">0 = no flush limit</small>
+                            <small class="field-hint">Max pairs paid per member per closing (0 = unlimited)</small>
                         </div>
                     </div>
                     <div class="settings-info">
                         <span class="si-ico">i</span>
-                        <p>Binary commission is paid on matched left/right pairs. Referral is paid to the sponsor on join.</p>
+                        <p>On activation, package BV is added to placement upline legs. Closing matches equal BV pairs, deducts matched BV (carry leftover), and pays binary + matching. Level income is paid on the sponsor chain at activation.</p>
                     </div>
                 </div>
                 <div class="settings-card-foot">

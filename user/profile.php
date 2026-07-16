@@ -1,5 +1,6 @@
 <?php
 $pageTitle = 'My Profile';
+require_once __DIR__ . '/../includes/closing.php';
 require_once __DIR__ . '/includes/header.php';
 
 $uid = (int) $user['id'];
@@ -7,6 +8,13 @@ $memberCode = (string) ($user['member_id'] ?? '');
 $status = member_effective_status($user);
 $isActive = member_is_active($user);
 $kyc = strtolower((string) ($user['kyc_status'] ?? 'not_submitted'));
+
+$leftBv = (float) ($user['left_bv'] ?? 0);
+$rightBv = (float) ($user['right_bv'] ?? 0);
+$pairBv = closing_pair_bv();
+$flush = max(0, (int) setting('binary_flush_pairs', '0'));
+$openMatch = closing_compute_match($leftBv, $rightBv, $pairBv, $flush);
+$openPairs = (float) ($openMatch['pairs'] ?? 0);
 
 $sponsor = null;
 if (!empty($user['sponsor_id'])) {
@@ -425,6 +433,9 @@ $transactions = array_slice($transactions, 0, 8);
                             <span class="pp-s-chip"><small>Package</small><strong><?= e($user['package_name'] ?? 'None') ?></strong></span>
                             <span class="pp-s-chip"><small>Position</small><strong><?= e($user['position'] ? ucfirst($user['position']) : '—') ?></strong></span>
                             <span class="pp-s-chip"><small>L / R</small><strong><?= (int) $user['left_count'] ?> / <?= (int) $user['right_count'] ?></strong></span>
+                            <span class="pp-s-chip"><small>Left BV</small><strong><?= number_format($leftBv, 0) ?></strong></span>
+                            <span class="pp-s-chip"><small>Right BV</small><strong><?= number_format($rightBv, 0) ?></strong></span>
+                            <span class="pp-s-chip"><small>Open Pairs</small><strong><?= number_format($openPairs, $openPairs == floor($openPairs) ? 0 : 2) ?></strong></span>
                         </div>
                         <p>
                             <?= $sponsor

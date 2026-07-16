@@ -127,13 +127,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const label = btn.querySelector('span');
             const original = label ? label.textContent : 'Copy';
+            const isIconCopy = btn.classList.contains('actx-copy-btn');
 
             const markCopied = () => {
                 btn.classList.add('is-copied');
                 if (label) label.textContent = 'Copied!';
+                if (isIconCopy) {
+                    btn.setAttribute('aria-label', 'Copied');
+                    btn.setAttribute('title', 'Copied');
+                }
                 setTimeout(() => {
                     btn.classList.remove('is-copied');
                     if (label) label.textContent = original;
+                    if (isIconCopy) {
+                        const restore = btn.getAttribute('data-label') || 'Copy';
+                        btn.setAttribute('aria-label', restore);
+                        btn.setAttribute('title', restore);
+                    }
                 }, 1600);
             };
 
@@ -481,6 +491,40 @@ document.addEventListener('DOMContentLoaded', () => {
                 lightbox.hidden = true;
                 lightboxImg.src = '';
             }
+        });
+    }
+
+    const searchWrap = document.querySelector('[data-up-search]');
+    const searchInput = document.getElementById('upSearchInput');
+    const searchDrop = document.getElementById('upSearchDrop');
+    if (searchWrap && searchInput && searchDrop) {
+        const links = Array.from(searchDrop.querySelectorAll('a'));
+        const showDrop = () => { searchDrop.hidden = false; };
+        const hideDrop = () => { searchDrop.hidden = true; };
+        const filterSearch = () => {
+            const q = (searchInput.value || '').trim().toLowerCase();
+            let visible = 0;
+            links.forEach((a) => {
+                const hay = ((a.getAttribute('data-search') || '') + ' ' + (a.textContent || '')).toLowerCase();
+                const on = !q || hay.includes(q);
+                a.hidden = !on;
+                if (on) visible += 1;
+            });
+            searchDrop.hidden = visible === 0;
+        };
+        searchInput.addEventListener('focus', () => {
+            filterSearch();
+            showDrop();
+        });
+        searchInput.addEventListener('input', filterSearch);
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                hideDrop();
+                searchInput.blur();
+            }
+        });
+        document.addEventListener('click', (e) => {
+            if (!searchWrap.contains(e.target)) hideDrop();
         });
     }
 });

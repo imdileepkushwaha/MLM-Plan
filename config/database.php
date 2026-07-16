@@ -84,17 +84,51 @@ function session_enforce_idle(string $scope, string $loginUrl): void
     $_SESSION[$activityKey] = $now;
 }
 
+/**
+ * Shared settings cache used by setting() / clear_setting_cache().
+ * @return array<string, string>
+ */
+function &settings_cache_store(): array
+{
+    static $cache = [];
+    return $cache;
+}
+
 function setting(string $key, string $default = ''): string
 {
     global $pdo;
-    static $cache = [];
-    if (!isset($cache[$key])) {
+    $cache = &settings_cache_store();
+    if (!array_key_exists($key, $cache)) {
         $stmt = $pdo->prepare('SELECT setting_value FROM settings WHERE setting_key = ?');
         $stmt->execute([$key]);
         $row = $stmt->fetch();
-        $cache[$key] = $row ? $row['setting_value'] : $default;
+        $cache[$key] = $row ? (string) $row['setting_value'] : $default;
     }
     return $cache[$key];
+}
+
+/** Drop cached settings (call after admin saves settings). */
+function clear_setting_cache(?string $key = null): void
+{
+    $cache = &settings_cache_store();
+    if ($key === null) {
+        foreach (array_keys($cache) as $k) {
+            unset($cache[$k]);
+        }
+        return;
+    }
+    unset($cache[$key]);
+}
+
+function is_maintenance_mode(): bool
+{
+    return setting('maintenance_mode', 'off') === 'on';
+}
+
+/** Clear member portal session keys. */
+function user_logout_session(): void
+{
+    session_clear_scope('user');
 }
 
 function currency(float $amount): string
@@ -151,11 +185,62 @@ function log_activity(string $action, string $details = ''): void
     ]);
 }
 
+function member_id_prefix(): string
+{
+    $raw = setting('member_id_prefix', 'MLM');
+    $prefix = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $raw) ?? '');
+    return $prefix !== '' ? substr($prefix, 0, 10) : 'MLM';
+}
+
+function member_id_pad(): int
+{
+    return max(3, min(8, (int) setting('member_id_pad', '5')));
+}
+
+/** Next sample ID for settings preview (does not reserve). */
+function member_id_preview(PDO $pdo): string
+{
+    $prefix = member_id_prefix();
+    $pad = member_id_pad();
+    $next = member_id_next_number($pdo, $prefix);
+    return $prefix . str_pad((string) $next, $pad, '0', STR_PAD_LEFT);
+}
+
+function member_id_next_number(PDO $pdo, string $prefix): int
+{
+    $max = 0;
+    try {
+        $stmt = $pdo->prepare('SELECT member_id FROM members WHERE member_id LIKE ?');
+        $stmt->execute([$prefix . '%']);
+        $plen = strlen($prefix);
+        foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $mid) {
+            $suffix = substr((string) $mid, $plen);
+            if ($suffix !== '' && ctype_digit($suffix)) {
+                $max = max($max, (int) $suffix);
+            }
+        }
+    } catch (Throwable $e) {
+        // fall through
+    }
+    return $max + 1;
+}
+
 function generate_member_id(PDO $pdo): string
 {
-    $stmt = $pdo->query('SELECT COUNT(*) AS cnt FROM members');
-    $count = (int) $stmt->fetch()['cnt'] + 1;
-    return 'MLM' . str_pad((string) $count, 5, '0', STR_PAD_LEFT);
+    $prefix = member_id_prefix();
+    $pad = member_id_pad();
+    $start = member_id_next_number($pdo, $prefix);
+
+    $check = $pdo->prepare('SELECT id FROM members WHERE member_id = ? LIMIT 1');
+    for ($n = $start; $n < $start + 100000; $n++) {
+        $code = $prefix . str_pad((string) $n, $pad, '0', STR_PAD_LEFT);
+        $check->execute([$code]);
+        if (!$check->fetch()) {
+            return $code;
+        }
+    }
+
+    return $prefix . strtoupper(bin2hex(random_bytes(3)));
 }
 
 require_once __DIR__ . '/../includes/utility.php';

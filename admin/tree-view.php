@@ -352,7 +352,7 @@ require_once __DIR__ . '/../includes/header.php';
         <form class="filters" method="get">
             <div class="form-group">
                 <label>Member ID / Username</label>
-                <input type="text" name="q" value="<?= e($search) ?>" placeholder="MLM00001">
+                <input type="text" name="q" value="<?= e($search) ?>" placeholder="<?= e(member_id_prefix() . str_pad('1', member_id_pad(), '0', STR_PAD_LEFT)) ?>">
             </div>
             <button type="submit" class="btn btn-primary">Show Tree</button>
             <a href="tree-view.php" class="btn btn-outline">Reset</a>
