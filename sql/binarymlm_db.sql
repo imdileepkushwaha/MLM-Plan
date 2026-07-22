@@ -188,6 +188,39 @@ CREATE TABLE IF NOT EXISTS contact_inquiries (
     updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
+-- Topup PIN (T-Pin / E-Pin) Type A — package pins for instant activate/upgrade
+CREATE TABLE IF NOT EXISTS topup_pins (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    pin_code VARCHAR(32) NOT NULL,
+    package_id INT NOT NULL,
+    status ENUM('unused','used','blocked') NOT NULL DEFAULT 'unused',
+    generated_by INT NULL,
+    assigned_to INT NULL,
+    used_by INT NULL,
+    used_at DATETIME NULL,
+    blocked_at DATETIME NULL,
+    blocked_by INT NULL,
+    batch_code VARCHAR(40) NULL,
+    note VARCHAR(255) NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_tpin_code (pin_code),
+    INDEX idx_tpin_status (status),
+    INDEX idx_tpin_assigned (assigned_to),
+    INDEX idx_tpin_package (package_id),
+    INDEX idx_tpin_batch (batch_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS topup_pin_transfers (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    pin_id INT NOT NULL,
+    from_member_id INT NOT NULL,
+    to_member_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_tpin_tr_pin (pin_id),
+    INDEX idx_tpin_tr_from (from_member_id),
+    INDEX idx_tpin_tr_to (to_member_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- Sample root member (password: member123)
 INSERT INTO members (member_id, username, email, password, full_name, phone, package_id, status) VALUES
 ('MLM00001', 'rootuser', 'root@binarymlm.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Root Member', '9999999999', 4, 'active');

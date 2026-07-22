@@ -9,7 +9,7 @@ define('DB_PASS', '');
 define('DB_CHARSET', 'utf8mb4');
 
 define('APP_NAME', 'Binary MLM Admin');
-define('APP_URL', 'http://localhost/mlm-plan');
+define('APP_URL', 'http://localhost:2207');
 define('BASE_PATH', dirname(__DIR__));
 
 date_default_timezone_set('Asia/Kolkata');

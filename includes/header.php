@@ -187,6 +187,13 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
                     <?php endif; ?>
                 </a>
 
+                <a href="tpin.php" class="nav-link <?= $currentPage === 'tpin' ? 'active' : '' ?>">
+                    <span class="nav-link-left">
+                        <?= nav_ico($icoCard) ?>
+                        <span class="nav-label">T-Pin</span>
+                    </span>
+                </a>
+
                 <a href="commissions.php" class="nav-link <?= $currentPage === 'commissions' ? 'active' : '' ?>">
                     <span class="nav-link-left">
                         <?= nav_ico($icoMoney) ?>

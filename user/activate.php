@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/activation.php';
+require_once __DIR__ . '/../includes/tpin.php';
 require_once __DIR__ . '/includes/auth.php';
 require_user();
 
@@ -22,6 +23,7 @@ $packages = $isUpgrade
     : activation_packages($pdo);
 $pending = activation_pending_request($pdo, (int) $user['id']);
 $pendingIsUpgrade = $pending && (($pending['request_type'] ?? 'activation') === 'upgrade');
+$myPins = tpin_member_unused($pdo, (int) $user['id']);
 
 $payBanks = [];
 try {
@@ -43,50 +45,75 @@ try {
 $supportEmail = setting('support_email', setting('contact_email', ''));
 $supportPhone = setting('contact_phone', '');
 
+$payMode = (string) ($_POST['pay_mode'] ?? 'utr');
+if (!in_array($payMode, ['utr', 'tpin'], true)) {
+    $payMode = 'utr';
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$pending) {
     $packageId = (int) ($_POST['package_id'] ?? 0);
-    $method = trim((string) ($_POST['payment_method'] ?? 'Bank Transfer'));
-    $utr = trim((string) ($_POST['utr_reference'] ?? ''));
-    $note = trim((string) ($_POST['note'] ?? ''));
 
-    if ($packageId <= 0) {
-        $errors[] = $isUpgrade ? 'Please select a package to upgrade.' : 'Please select a package to activate.';
-    } elseif ($isUpgrade && !$packages) {
-        $errors[] = 'No higher package is available to upgrade.';
-    } else {
-        $isCash = ($method === 'Cash');
-        $slipPath = null;
-
-        if (!$isCash) {
-            $slipUp = activation_store_slip($_FILES['payment_slip'] ?? [], (int) $user['id']);
-            if (!$slipUp['ok']) {
-                $errors[] = $slipUp['error'] ?? 'Payment slip upload failed.';
-            } else {
-                $slipPath = $slipUp['path'];
-            }
+    if ($payMode === 'tpin') {
+        $pinCode = (string) ($_POST['tpin_code'] ?? '');
+        // Package can come from selected card; pin must match. If no package selected, pin decides.
+        $expectedPkg = $packageId > 0 ? $packageId : null;
+        $result = tpin_redeem($pdo, $user, $pinCode, $expectedPkg);
+        if ($result['ok']) {
+            $pkgName = (string) ($result['package']['name'] ?? 'package');
+            flash(
+                'success',
+                ($result['mode'] === 'upgrade')
+                    ? "Upgrade complete via T-Pin — you are now on {$pkgName}."
+                    : "Account activated via T-Pin — package {$pkgName} assigned."
+            );
+            header('Location: index.php');
+            exit;
         }
+        $errors[] = $result['error'] ?? 'T-Pin redemption failed.';
+    } else {
+        $method = trim((string) ($_POST['payment_method'] ?? 'Bank Transfer'));
+        $utr = trim((string) ($_POST['utr_reference'] ?? ''));
+        $note = trim((string) ($_POST['note'] ?? ''));
 
-        if (!$errors) {
-            $result = $isUpgrade
-                ? activation_submit_upgrade_request($pdo, $user, $packageId, $method, $utr, $note, $slipPath)
-                : activation_submit_request($pdo, $user, $packageId, $method, $utr, $note, $slipPath);
-            if ($result['ok']) {
-                flash(
-                    'success',
-                    $isUpgrade
-                        ? 'Upgrade request submitted. Pay only the difference — admin will verify and upgrade your plan.'
-                        : 'Activation request submitted. Admin will verify your payment and activate your account.'
-                );
-                header('Location: activate.php');
-                exit;
-            }
-            if ($slipPath) {
-                $orphan = BASE_PATH . DIRECTORY_SEPARATOR . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $slipPath);
-                if (is_file($orphan)) {
-                    @unlink($orphan);
+        if ($packageId <= 0) {
+            $errors[] = $isUpgrade ? 'Please select a package to upgrade.' : 'Please select a package to activate.';
+        } elseif ($isUpgrade && !$packages) {
+            $errors[] = 'No higher package is available to upgrade.';
+        } else {
+            $isCash = ($method === 'Cash');
+            $slipPath = null;
+
+            if (!$isCash) {
+                $slipUp = activation_store_slip($_FILES['payment_slip'] ?? [], (int) $user['id']);
+                if (!$slipUp['ok']) {
+                    $errors[] = $slipUp['error'] ?? 'Payment slip upload failed.';
+                } else {
+                    $slipPath = $slipUp['path'];
                 }
             }
-            $errors[] = $result['error'] ?? 'Could not submit request.';
+
+            if (!$errors) {
+                $result = $isUpgrade
+                    ? activation_submit_upgrade_request($pdo, $user, $packageId, $method, $utr, $note, $slipPath)
+                    : activation_submit_request($pdo, $user, $packageId, $method, $utr, $note, $slipPath);
+                if ($result['ok']) {
+                    flash(
+                        'success',
+                        $isUpgrade
+                            ? 'Upgrade request submitted. Pay only the difference — admin will verify and upgrade your plan.'
+                            : 'Activation request submitted. Admin will verify your payment and activate your account.'
+                    );
+                    header('Location: activate.php');
+                    exit;
+                }
+                if ($slipPath) {
+                    $orphan = BASE_PATH . DIRECTORY_SEPARATOR . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $slipPath);
+                    if (is_file($orphan)) {
+                        @unlink($orphan);
+                    }
+                }
+                $errors[] = $result['error'] ?? 'Could not submit request.';
+            }
         }
     }
 }
@@ -125,10 +152,13 @@ $maxPkgAvailable = $isUpgrade && !$packages && !$pending;
     <div>
         <h1><?= $isUpgrade ? 'Upgrade Plan' : 'Activate Account' ?></h1>
         <p><?= $isUpgrade
-            ? 'Move to a higher package — pay only the difference amount, then submit UTR for approval.'
-            : 'Pay for a package, submit your UTR, and wait for admin approval.' ?></p>
+            ? 'Upgrade with T-Pin (instant) or pay the difference via UTR/slip for admin approval.'
+            : 'Activate with T-Pin (instant) or pay via UTR/slip for admin approval.' ?></p>
     </div>
-    <a href="index.php" class="up-btn up-btn-outline">Back to Dashboard</a>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+        <a href="tpin.php" class="up-btn up-btn-outline">My T-Pins</a>
+        <a href="index.php" class="up-btn up-btn-outline">Back to Dashboard</a>
+    </div>
 </div>
 
 <?php foreach ($errors as $err): ?>
@@ -185,13 +215,11 @@ $maxPkgAvailable = $isUpgrade && !$packages && !$pending;
     <div class="actx-hero-copy">
         <span class="actx-kicker"><?= $isUpgrade ? 'Plan upgrade' : 'Membership activation' ?></span>
         <h2><?= $isUpgrade ? 'Upgrade to a higher plan' : 'Choose your growth plan' ?></h2>
-        <p><?= $isUpgrade
-            ? 'Select a higher package and pay only the difference (new amount − current amount).'
-            : 'Select a package, transfer the amount, then submit your UTR for admin verification.' ?></p>
+        <p>Use a <strong>T-Pin</strong> for instant <?= $isUpgrade ? 'upgrade' : 'activation' ?>, or pay by bank/UPI and submit UTR for admin approval.</p>
         <ol class="actx-steps">
             <li class="is-on"><span>1</span> Select package</li>
-            <li class="<?= $stepPay ? 'is-on' : '' ?>"><span>2</span> Pay &amp; submit UTR</li>
-            <li><span>3</span> Admin <?= $isUpgrade ? 'upgrades' : 'activates' ?></li>
+            <li class="<?= $stepPay ? 'is-on' : '' ?>"><span>2</span> T-Pin or UTR</li>
+            <li><span>3</span> <?= $isUpgrade ? 'Upgraded' : 'Activated' ?></li>
         </ol>
     </div>
     <aside class="actx-hero-user">
@@ -212,8 +240,8 @@ $maxPkgAvailable = $isUpgrade && !$packages && !$pending;
                 <strong><?= e($currentPkg['name'] ?? ($user['package_name'] ?? 'Not assigned')) ?></strong>
             </div>
             <div class="actx-user-stat">
-                <span>Wallet</span>
-                <strong class="actx-wallet"><?= currency((float) $user['wallet_balance']) ?></strong>
+                <span>T-Pins</span>
+                <strong><?= count($myPins) ?> unused</strong>
             </div>
         </div>
     </aside>
@@ -233,8 +261,8 @@ $maxPkgAvailable = $isUpgrade && !$packages && !$pending;
     <div class="actx-section-head">
         <h3><?= $isUpgrade ? 'Upgrade packages' : 'Available packages' ?></h3>
         <p><?= $isUpgrade
-            ? 'Only higher plans are listed. Payable = package price − your current plan.'
-            : 'Tap a card to select — then enter payment details below.' ?></p>
+            ? 'Only higher plans are listed. T-Pin must match the selected package.'
+            : 'Select a package, then choose T-Pin or UTR payment below.' ?></p>
     </div>
 
     <?php if ($isUpgrade && $currentPkg): ?>
@@ -276,7 +304,7 @@ $maxPkgAvailable = $isUpgrade && !$packages && !$pending;
                 <span class="actx-name"><?= e($pkg['name']) ?></span>
                 <span class="actx-price"><?= currency($payAmt) ?></span>
                 <?php if ($isUpgrade): ?>
-                    <span class="actx-desc" style="margin-top:-0.35rem">Full price <?= currency((float) $pkg['amount']) ?> · you pay difference</span>
+                    <span class="actx-desc" style="margin-top:-0.35rem">Full price <?= currency((float) $pkg['amount']) ?> · UTR pays difference · T-Pin = full package pin</span>
                 <?php endif; ?>
                 <span class="actx-stats">
                     <span><small><?= $isUpgrade ? '+BV' : 'BV' ?></small><strong><?= number_format($bvShow, 0) ?></strong></span>
@@ -292,6 +320,62 @@ $maxPkgAvailable = $isUpgrade && !$packages && !$pending;
         <?php endforeach; ?>
     </div>
 
+    <section class="actx-pay-panel" style="margin-top:1.5rem">
+        <div class="actx-pay-head is-teal">
+            <div class="actx-pay-head-main">
+                <span class="actx-pay-head-ico" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 9h4M7 13h10"/></svg>
+                </span>
+                <div>
+                    <span class="actx-pay-kicker">Step 2 · Payment mode</span>
+                    <h3>How do you want to <?= $isUpgrade ? 'upgrade' : 'activate' ?>?</h3>
+                    <p>T-Pin activates instantly. UTR/slip goes to admin for approval.</p>
+                </div>
+            </div>
+        </div>
+        <div class="actx-proof-body" style="display:block">
+            <div class="actx-mode-tabs" style="display:flex;gap:0.6rem;flex-wrap:wrap;margin-bottom:1.1rem">
+                <label class="actx-mode-tab" style="flex:1;min-width:160px;border:1.5px solid var(--up-border,#e5e7eb);border-radius:12px;padding:0.85rem 1rem;cursor:pointer;display:grid;gap:0.2rem">
+                    <span style="display:flex;align-items:center;gap:0.5rem">
+                        <input type="radio" name="pay_mode" value="tpin" <?= $payMode === 'tpin' ? 'checked' : '' ?> data-actx-mode>
+                        <strong>T-Pin</strong>
+                    </span>
+                    <small style="opacity:.7">Instant <?= $isUpgrade ? 'upgrade' : 'activation' ?> · no admin wait</small>
+                </label>
+                <label class="actx-mode-tab" style="flex:1;min-width:160px;border:1.5px solid var(--up-border,#e5e7eb);border-radius:12px;padding:0.85rem 1rem;cursor:pointer;display:grid;gap:0.2rem">
+                    <span style="display:flex;align-items:center;gap:0.5rem">
+                        <input type="radio" name="pay_mode" value="utr" <?= $payMode === 'utr' ? 'checked' : '' ?> data-actx-mode>
+                        <strong>UTR / Slip</strong>
+                    </span>
+                    <small style="opacity:.7">Bank / UPI transfer · admin approval</small>
+                </label>
+            </div>
+
+            <div id="actxTpinPanel" <?= $payMode === 'tpin' ? '' : 'hidden' ?>>
+                <div class="up-field" style="max-width:420px">
+                    <label for="tpin_code">Enter T-Pin *</label>
+                    <?php if ($myPins): ?>
+                    <select id="tpin_pick" style="margin-bottom:0.55rem">
+                        <option value="">Pick from my wallet…</option>
+                        <?php foreach ($myPins as $mp): ?>
+                            <option value="<?= e(tpin_format_code((string) $mp['pin_code'])) ?>" data-pkg="<?= (int) $mp['package_id'] ?>">
+                                <?= e(tpin_format_code((string) $mp['pin_code'])) ?> · <?= e($mp['package_name']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <?php endif; ?>
+                    <input type="text" name="tpin_code" id="tpin_code" maxlength="20"
+                           value="<?= e($_POST['tpin_code'] ?? '') ?>"
+                           placeholder="XXXX-XXXX-XXXX"
+                           autocomplete="off"
+                           <?= $payMode === 'tpin' ? 'required' : '' ?>>
+                    <small style="display:block;margin-top:0.4rem;opacity:.7">Pin package must match the selected plan. Unused company-stock pins also work if you have the code.</small>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div id="actxUtrPanel" <?= $payMode === 'utr' ? '' : 'hidden' ?>>
     <?php if ($payBanks): ?>
     <section class="actx-pay-panel actx-bank-panel" id="actxBankPanel">
         <div class="actx-pay-head is-teal">
@@ -478,6 +562,7 @@ $maxPkgAvailable = $isUpgrade && !$packages && !$pending;
             </aside>
         </div>
     </section>
+    </div>
 
     <div class="actx-bar">
         <div class="actx-bar-summary">
@@ -485,15 +570,17 @@ $maxPkgAvailable = $isUpgrade && !$packages && !$pending;
             <strong id="actxSumName"><?= e($selectedPkg['name'] ?? '—') ?></strong>
             <div class="actx-bar-meta">
                 <span id="actxSumPrice"><?= $selectedPkg ? currency($selectedPay) : '—' ?></span>
-                <?php if ($isUpgrade): ?><span class="actx-bar-pay-note">difference</span><?php endif; ?>
+                <?php if ($isUpgrade): ?><span class="actx-bar-pay-note">difference (UTR)</span><?php endif; ?>
                 <span>·</span>
                 <span><?= $isUpgrade ? '+BV' : 'BV' ?> <em id="actxSumBv"><?= $selectedPkg ? number_format($selectedBvDelta, 0) : '0' ?></em></span>
                 <span>·</span>
                 <span><em id="actxSumDays"><?= $selectedPkg ? (int) $selectedPkg['validity_days'] : 0 ?></em> days</span>
             </div>
         </div>
-        <button type="submit" class="actx-submit">
-            <span><?= $isUpgrade ? 'Submit Upgrade' : 'Submit for Approval' ?></span>
+        <button type="submit" class="actx-submit" id="actxSubmitBtn">
+            <span id="actxSubmitLabel"><?= $payMode === 'tpin'
+                ? ($isUpgrade ? 'Activate Upgrade with T-Pin' : 'Activate with T-Pin')
+                : ($isUpgrade ? 'Submit Upgrade' : 'Submit for Approval') ?></span>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
         </button>
     </div>
@@ -715,6 +802,81 @@ $maxPkgAvailable = $isUpgrade && !$packages && !$pending;
         methodSel.addEventListener('change', syncPaymentProof);
         methodSel.addEventListener('input', syncPaymentProof);
         syncPaymentProof();
+    }
+
+    const modeInputs = document.querySelectorAll('[data-actx-mode]');
+    const tpinPanel = document.getElementById('actxTpinPanel');
+    const utrPanel = document.getElementById('actxUtrPanel');
+    const tpinInput = document.getElementById('tpin_code');
+    const tpinPick = document.getElementById('tpin_pick');
+    const submitLabel = document.getElementById('actxSubmitLabel');
+    const isUpgradeUi = <?= $isUpgrade ? 'true' : 'false' ?>;
+
+    function currentMode() {
+        const checked = document.querySelector('[data-actx-mode]:checked');
+        return checked ? checked.value : 'utr';
+    }
+
+    function syncPayMode() {
+        const mode = currentMode();
+        const isTpin = mode === 'tpin';
+        if (tpinPanel) tpinPanel.hidden = !isTpin;
+        if (utrPanel) utrPanel.hidden = isTpin;
+        if (tpinInput) {
+            if (isTpin) {
+                tpinInput.setAttribute('required', 'required');
+                tpinInput.disabled = false;
+            } else {
+                tpinInput.removeAttribute('required');
+                tpinInput.disabled = true;
+            }
+        }
+        if (methodSel) methodSel.disabled = isTpin;
+        if (utrInput) {
+            if (isTpin) {
+                utrInput.removeAttribute('required');
+                utrInput.disabled = true;
+            } else {
+                utrInput.disabled = false;
+            }
+        }
+        if (slipInput) {
+            if (isTpin) {
+                slipInput.removeAttribute('required');
+                slipInput.disabled = true;
+            } else {
+                slipInput.disabled = false;
+            }
+        }
+        if (submitLabel) {
+            if (isTpin) {
+                submitLabel.textContent = isUpgradeUi ? 'Activate Upgrade with T-Pin' : 'Activate with T-Pin';
+            } else {
+                submitLabel.textContent = isUpgradeUi ? 'Submit Upgrade' : 'Submit for Approval';
+            }
+        }
+        if (!isTpin && typeof syncPaymentProof === 'function') {
+            syncPaymentProof();
+        }
+    }
+
+    modeInputs.forEach((el) => el.addEventListener('change', syncPayMode));
+    syncPayMode();
+
+    if (tpinPick && tpinInput) {
+        tpinPick.addEventListener('change', () => {
+            if (tpinPick.value) tpinInput.value = tpinPick.value;
+            const opt = tpinPick.options[tpinPick.selectedIndex];
+            const pkgId = opt ? opt.getAttribute('data-pkg') : '';
+            if (pkgId) {
+                const radio = document.querySelector('input[name="package_id"][value="' + pkgId + '"]');
+                if (radio) {
+                    radio.checked = true;
+                    const card = radio.closest('[data-actx-card]');
+                    if (card) sync(card);
+                }
+            }
+        });
     }
 })();
 </script>

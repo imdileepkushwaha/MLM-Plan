@@ -32,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'activ
 $stmt = $pdo->prepare("
     SELECT m.*, p.name AS package_name, p.amount AS package_amount,
            s.full_name AS sponsor_name, s.member_id AS sponsor_mid, s.id AS sponsor_db_id,
-           pl.full_name AS placement_name, pl.member_id AS placement_mid
+           pl.full_name AS placement_name, pl.member_id AS placement_mid, pl.id AS placement_db_id
     FROM members m
     LEFT JOIN packages p ON p.id = m.package_id
     LEFT JOIN members s ON s.id = m.sponsor_id
@@ -188,8 +188,15 @@ require_once __DIR__ . '/../includes/header.php';
                     </strong>
                 </div>
                 <div class="mv-detail">
-                    <span>Placement</span>
-                    <strong><?= $member['placement_mid'] ? e($member['placement_mid'] . ' (' . ucfirst((string)$member['position']) . ')') : 'Root Member' ?></strong>
+                    <span>Parent ID</span>
+                    <strong>
+                        <?php if ($member['placement_mid']): ?>
+                            <a href="member-view.php?id=<?= (int)$member['placement_db_id'] ?>"><?= e($member['placement_mid'] . ' — ' . $member['placement_name']) ?></a>
+                            <small style="display:block;margin-top:0.2rem;font-weight:600;color:var(--ink-muted)"><?= e(ucfirst((string) ($member['position'] ?? ''))) ?> leg</small>
+                        <?php else: ?>
+                            Root Member
+                        <?php endif; ?>
+                    </strong>
                 </div>
                 <div class="mv-detail"><span>Joined</span><strong><?= date('d M Y, h:i A', strtotime($member['join_date'])) ?></strong></div>
                 <div class="mv-detail"><span>Commissions Earned</span><strong><?= currency($commTotal) ?></strong></div>

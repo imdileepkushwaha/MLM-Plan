@@ -9563,3 +9563,418 @@ body.is-maintenance .ulog {
     .actx-pending { grid-template-columns: 1fr; }
     .actx-pay-fields { grid-template-columns: 1fr; }
 }
+
+/* ===== T-Pin wallet ===== */
+.tpin-head-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.tpin-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.85rem;
+    margin-bottom: 1.05rem;
+}
+
+.tpin-stat {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem 1.05rem;
+    background: #fff;
+    border: 1px solid #eef0f4;
+    border-radius: 14px;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+    overflow: hidden;
+}
+
+.tpin-stat::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+}
+
+.tpin-stat.g-green::after { background: #17ad37; }
+.tpin-stat.g-blue::after { background: #2152ff; }
+.tpin-stat.g-orange::after { background: #f59e0b; }
+
+.tpin-stat-ico {
+    flex-shrink: 0;
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+    color: #fff;
+}
+
+.tpin-stat.g-green .tpin-stat-ico { background: linear-gradient(310deg, #17ad37, #98ec2d); }
+.tpin-stat.g-blue .tpin-stat-ico { background: linear-gradient(310deg, #2152ff, #21d4fd); }
+.tpin-stat.g-orange .tpin-stat-ico { background: linear-gradient(310deg, #f53939, #fbcf33); }
+
+.tpin-stat-ico svg { width: 20px; height: 20px; }
+
+.tpin-stat-label {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #8392ab;
+}
+
+.tpin-stat strong {
+    display: block;
+    margin-top: 0.12rem;
+    font-size: 1.35rem;
+    font-weight: 800;
+    color: #344767;
+    letter-spacing: -0.02em;
+}
+
+.tpin-stat small {
+    display: block;
+    margin-top: 0.12rem;
+    font-size: 0.74rem;
+    color: #8392ab;
+    font-weight: 600;
+}
+
+.tpin-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.55fr) minmax(220px, 0.85fr);
+    gap: 1rem;
+    align-items: start;
+}
+
+.tpin-split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    align-items: start;
+}
+
+.tpin-card {
+    background: #fff;
+    border: 1px solid #eef0f4;
+    border-radius: 16px;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05);
+    overflow: hidden;
+}
+
+.tpin-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    padding: 1rem 1.15rem;
+    color: #fff;
+}
+
+.tpin-banner.is-gold {
+    background:
+        radial-gradient(ellipse 70% 120% at 100% 0%, rgba(255, 255, 255, 0.18), transparent 55%),
+        linear-gradient(118deg, #0f172a 0%, #334155 45%, #f59e0b 140%);
+}
+
+.tpin-banner.is-teal {
+    background:
+        radial-gradient(ellipse 70% 120% at 100% 0%, rgba(255, 255, 255, 0.18), transparent 55%),
+        linear-gradient(120deg, #0f766e 0%, #14b8a6 100%);
+}
+
+.tpin-banner.is-navy {
+    background:
+        radial-gradient(ellipse 70% 120% at 100% 0%, rgba(255, 255, 255, 0.14), transparent 55%),
+        linear-gradient(120deg, #16213e 0%, #2152ff 120%);
+}
+
+.tpin-banner.is-muted {
+    background: linear-gradient(120deg, #f8fafc 0%, #eef2ff 100%);
+    color: #334155;
+    border-bottom: 1px solid #eef0f4;
+}
+
+.tpin-banner.is-muted .tpin-kicker { color: #64748b; opacity: 1; }
+.tpin-banner.is-muted h2 { color: #1e293b; }
+
+.tpin-banner-main {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+}
+
+.tpin-banner-ico {
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+    background: rgba(255, 255, 255, 0.16);
+    color: #fff;
+}
+
+.tpin-banner-ico svg { width: 20px; height: 20px; }
+
+.tpin-kicker {
+    display: block;
+    font-size: 0.64rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    opacity: 0.9;
+}
+
+.tpin-banner h2 {
+    margin: 0.1rem 0 0;
+    font-size: 1rem;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: -0.02em;
+}
+
+.tpin-banner p {
+    margin: 0.2rem 0 0;
+    font-size: 0.76rem;
+    opacity: 0.9;
+    max-width: 420px;
+    line-height: 1.4;
+}
+
+.tpin-body { padding: 1.15rem 1.25rem 1.3rem; }
+
+.tpin-form {
+    display: grid;
+    gap: 0.95rem;
+}
+
+.tpin-form-actions {
+    display: flex;
+    justify-content: flex-start;
+    padding-top: 0.15rem;
+}
+
+.tpin-empty {
+    text-align: center;
+    padding: 1.5rem 1rem;
+    border: 1px dashed #dbe3f0;
+    border-radius: 12px;
+    background: #f8fafc;
+}
+
+.tpin-empty strong {
+    display: block;
+    color: #334155;
+    font-size: 0.95rem;
+}
+
+.tpin-empty p {
+    margin: 0.35rem 0 0;
+    color: #8392ab;
+    font-size: 0.84rem;
+    line-height: 1.45;
+}
+
+.tpin-tips {
+    margin: 0;
+    padding-left: 1.15rem;
+    display: grid;
+    gap: 0.55rem;
+    color: #475569;
+    font-size: 0.86rem;
+    line-height: 1.45;
+}
+
+.tpin-tips a {
+    color: #2152ff;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.tpin-tips a:hover { text-decoration: underline; }
+
+.tpin-pin-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 0.85rem;
+}
+
+.tpin-pin-card {
+    display: grid;
+    gap: 0.65rem;
+    padding: 0.95rem 1rem;
+    border: 1px solid #e8edf5;
+    border-radius: 14px;
+    background:
+        linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.tpin-pin-card:hover {
+    border-color: #c7d2fe;
+    box-shadow: 0 8px 20px rgba(33, 82, 255, 0.08);
+}
+
+.tpin-pin-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.tpin-pin-pkg {
+    font-size: 0.78rem;
+    font-weight: 800;
+    color: #334155;
+}
+
+.tpin-pin-amt {
+    font-size: 0.74rem;
+    font-weight: 700;
+    color: #0f766e;
+    background: rgba(15, 118, 110, 0.08);
+    padding: 0.18rem 0.45rem;
+    border-radius: 999px;
+}
+
+.tpin-pin-code {
+    display: block;
+    font-size: 0.95rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    color: #16213e;
+    background: #fff;
+    border: 1px dashed #cbd5e1;
+    border-radius: 10px;
+    padding: 0.55rem 0.65rem;
+    text-align: center;
+    cursor: pointer;
+    user-select: all;
+}
+
+.tpin-pin-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.tpin-pin-foot small {
+    color: #94a3b8;
+    font-size: 0.72rem;
+    font-weight: 600;
+}
+
+.tpin-copy-btn {
+    border: 0;
+    background: #eef2ff;
+    color: #2152ff;
+    font: inherit;
+    font-size: 0.72rem;
+    font-weight: 800;
+    padding: 0.28rem 0.55rem;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.tpin-copy-btn:hover { background: #e0e7ff; }
+.tpin-copy-btn.is-copied {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.tpin-table-wrap { overflow-x: auto; }
+
+.tpin-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.86rem;
+}
+
+.tpin-table th {
+    text-align: left;
+    padding: 0.7rem 1rem;
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #8392ab;
+    background: #f8fafc;
+    border-bottom: 1px solid #eef0f4;
+}
+
+.tpin-table td {
+    padding: 0.8rem 1rem;
+    border-bottom: 1px solid #f1f5f9;
+    color: #334155;
+    vertical-align: top;
+}
+
+.tpin-table tbody tr:hover { background: #fafbfc; }
+
+.tpin-td-empty {
+    text-align: center;
+    color: #94a3b8 !important;
+    padding: 1.4rem 1rem !important;
+}
+
+.tpin-code-sm {
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: #16213e;
+}
+
+.tpin-dir {
+    margin-top: 0.25rem;
+    display: inline-block;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 0.12rem 0.4rem;
+    border-radius: 999px;
+}
+
+.tpin-dir.is-out {
+    background: rgba(245, 158, 11, 0.14);
+    color: #b45309;
+}
+
+.tpin-dir.is-in {
+    background: rgba(23, 173, 55, 0.12);
+    color: #15803d;
+}
+
+.tpin-arrow {
+    margin: 0 0.25rem;
+    color: #94a3b8;
+    font-weight: 700;
+}
+
+.tpin-sub {
+    margin-top: 0.2rem;
+    font-size: 0.74rem;
+    color: #8392ab;
+}
+
+@media (max-width: 980px) {
+    .tpin-layout,
+    .tpin-split { grid-template-columns: 1fr; }
+    .tpin-stats { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 560px) {
+    .tpin-stats { grid-template-columns: 1fr; }
+}
+
