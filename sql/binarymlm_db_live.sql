@@ -1,8 +1,10 @@
+-- Binary MLM Database Schema (LIVE / shared hosting)
+-- Import this file in phpMyAdmin with database `binarymlm_db` already selected.
+-- Do NOT import a local phpMyAdmin export (it contains DEFINER=root and fails on shared hosting).
+-- Stored procedures are auto-created by the app (includes/procedures.php) — not in this file.
 -- Binary MLM Database Schema
 -- Database: binarymlm_db
 
-CREATE DATABASE IF NOT EXISTS binarymlm_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE binarymlm_db;
 
 -- Admin users
 CREATE TABLE IF NOT EXISTS admins (
@@ -153,7 +155,7 @@ INSERT INTO settings (setting_key, setting_value) VALUES
 ('tds_deduction_percent', '5'),
 ('daily_closing_admin_charge', '0'),
 ('currency', 'INR'),
-('currency_symbol', '₹'),
+('currency_symbol', 'â‚¹'),
 ('contact_person', 'Support Team'),
 ('contact_phone', '+91 98765 43210'),
 ('contact_whatsapp', '919876543210'),
@@ -164,7 +166,7 @@ INSERT INTO settings (setting_key, setting_value) VALUES
 ('contact_state', 'Maharashtra'),
 ('contact_country', 'India'),
 ('contact_pincode', '400001'),
-('contact_hours', 'Mon–Sat, 10:00 AM – 6:00 PM'),
+('contact_hours', 'Monâ€“Sat, 10:00 AM â€“ 6:00 PM'),
 ('contact_map_url', ''),
 ('contact_facebook', ''),
 ('contact_instagram', ''),
@@ -188,7 +190,7 @@ CREATE TABLE IF NOT EXISTS contact_inquiries (
     updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
--- Topup PIN (T-Pin / E-Pin) Type A — package pins for instant activate/upgrade
+-- Topup PIN (T-Pin / E-Pin) Type A â€” package pins for instant activate/upgrade
 CREATE TABLE IF NOT EXISTS topup_pins (
     id INT AUTO_INCREMENT PRIMARY KEY,
     pin_code VARCHAR(32) NOT NULL,
@@ -224,3 +226,4 @@ CREATE TABLE IF NOT EXISTS topup_pin_transfers (
 -- Sample root member (password: member123)
 INSERT INTO members (member_id, username, email, password, full_name, phone, package_id, status) VALUES
 ('MLM00001', 'rootuser', 'root@binarymlm.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Root Member', '9999999999', 4, 'active');
+

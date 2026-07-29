@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../includes/schema_setup.php';
 
 if (!empty($_SESSION['admin_id'])) {
     session_enforce_idle('admin', 'login.php');
@@ -8,35 +9,70 @@ if (!empty($_SESSION['admin_id'])) {
 }
 
 $error = '';
+$setupMsg = '';
+$setupOk = false;
 $flash = get_flash();
+$schema = mlm_schema_status($pdo);
+$needsSetup = !$schema['complete'];
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $username = trim($_POST['username'] ?? '');
-    $password = $_POST['password'] ?? '';
-
-    if ($username === '' || $password === '') {
-        $error = 'Username and password are required.';
-    } else {
-        $stmt = $pdo->prepare('SELECT * FROM admins WHERE username = ? AND status = ? LIMIT 1');
-        $stmt->execute([$username, 'active']);
-        $admin = $stmt->fetch();
-
-        if ($admin && password_verify($password, $admin['password'])) {
-            $_SESSION['admin_id'] = $admin['id'];
-            $_SESSION['admin_name'] = $admin['full_name'];
-            $_SESSION['admin_username'] = $admin['username'];
-            session_touch('admin');
-
-            $pdo->prepare('UPDATE admins SET last_login = NOW() WHERE id = ?')->execute([$admin['id']]);
-            log_activity('login', 'Admin logged in');
-
-            header('Location: index.php');
-            exit;
+    if (isset($_POST['run_schema_setup'])) {
+        try {
+            $result = mlm_run_schema_setup($pdo);
+            $setupOk = $result['ok'];
+            $setupMsg = $result['message']
+                . ' Tables: ' . $result['tables']
+                . ', Procedures: ' . $result['procedures']
+                . '.';
+            if ($result['created']) {
+                $setupMsg .= ' Created: ' . implode(', ', $result['created']) . '.';
+            }
+            $schema = mlm_schema_status($pdo);
+            $needsSetup = !$schema['complete'];
+        } catch (Throwable $e) {
+            $error = 'Setup failed: ' . $e->getMessage();
         }
-        $error = 'Invalid username or password.';
+    } else {
+        $username = trim($_POST['username'] ?? '');
+        $password = $_POST['password'] ?? '';
+
+        if ($username === '' || $password === '') {
+            $error = 'Username and password are required.';
+        } else {
+            try {
+                $stmt = $pdo->prepare('SELECT * FROM admins WHERE username = ? AND status = ? LIMIT 1');
+                $stmt->execute([$username, 'active']);
+                $admin = $stmt->fetch();
+            } catch (Throwable $e) {
+                $admin = false;
+                $error = 'Database tables missing. Click “Setup Database” first.';
+            }
+
+            if (empty($error) && $admin && password_verify($password, $admin['password'])) {
+                $_SESSION['admin_id'] = $admin['id'];
+                $_SESSION['admin_name'] = $admin['full_name'];
+                $_SESSION['admin_username'] = $admin['username'];
+                session_touch('admin');
+
+                $pdo->prepare('UPDATE admins SET last_login = NOW() WHERE id = ?')->execute([$admin['id']]);
+                log_activity('login', 'Admin logged in');
+
+                header('Location: index.php');
+                exit;
+            }
+            if (empty($error)) {
+                $error = 'Invalid username or password.';
+            }
+        }
     }
 }
 
-$company = setting('company_name', 'Binary MLM');
+try {
+    $company = setting('company_name', 'Binary MLM');
+} catch (Throwable $e) {
+    $company = 'Binary MLM';
+    $needsSetup = true;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -46,6 +82,28 @@ $company = setting('company_name', 'Binary MLM');
     <title>Admin Login | <?= e($company) ?></title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../assets/css/admin.css">
+    <style>
+        .auth-setup-btn {
+            width: 100%;
+            margin-top: 0;
+            background: #0f172a;
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            padding: .85rem 1rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .auth-setup-btn:hover { background: #1e293b; }
+        .auth-setup-box {
+            background: #fff7ed;
+            border: 1px solid #fdba74;
+            border-radius: 14px;
+            padding: .9rem 1rem 1rem;
+            margin-bottom: 1rem;
+        }
+        .auth-setup-box .auth-sub { margin: 0 0 .75rem; color: #9a3412; font-size: .9rem; }
+    </style>
 </head>
 <body class="auth-page">
 <div class="auth-shell">
@@ -72,7 +130,23 @@ $company = setting('company_name', 'Binary MLM');
             <?php if (!empty($flash)): ?>
                 <div class="alert alert-<?= e($flash['type'] === 'success' ? 'success' : ($flash['type'] === 'error' ? 'error' : 'info')) ?> auth-alert"><?= e($flash['message']) ?></div>
             <?php endif; ?>
+            <?php if ($setupMsg): ?><div class="alert alert-<?= $setupOk ? 'success' : 'error' ?> auth-alert"><?= e($setupMsg) ?></div><?php endif; ?>
             <?php if ($error): ?><div class="alert alert-error auth-alert"><?= e($error) ?></div><?php endif; ?>
+
+            <?php if ($needsSetup): ?>
+            <div class="auth-setup-box">
+                <form method="post" onsubmit="return confirm('Create / update all missing tables and procedures now?');">
+                    <input type="hidden" name="run_schema_setup" value="1">
+                    <p class="auth-sub">Database incomplete (<?= (int) count($schema['missing']) ?> tables missing). One click installs all tables + procedures and sets admin / admin123.</p>
+                    <button type="submit" class="auth-setup-btn">Setup Database (Tables + Procedures)</button>
+                </form>
+            </div>
+            <?php else: ?>
+            <form method="post" style="margin-bottom:1rem" onsubmit="return confirm('Reset admin password to admin123?');">
+                <input type="hidden" name="run_schema_setup" value="1">
+                <button type="submit" class="auth-setup-btn" style="background:#64748b;font-size:.85rem;padding:.65rem 1rem">Fix Admin Login (set password admin123)</button>
+            </form>
+            <?php endif; ?>
 
             <form method="post" autocomplete="off" class="auth-form">
                 <div class="auth-field">

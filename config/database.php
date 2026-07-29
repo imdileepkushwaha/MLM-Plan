@@ -1,15 +1,28 @@
 <?php
 /**
  * Database Configuration - Binary MLM
+ * Local (localhost) → XAMPP defaults
+ * Live server → online DB credentials
  */
-define('DB_HOST', 'localhost');
-define('DB_NAME', 'binarymlm_db');
-define('DB_USER', 'root');
-define('DB_PASS', '');
+$hostName = $_SERVER['HTTP_HOST'] ?? 'localhost';
+$isLocal = (bool) preg_match('/^(localhost|127\.0\.0\.1)(:\d+)?$/i', $hostName);
+
+if ($isLocal) {
+    define('DB_HOST', 'localhost');
+    define('DB_NAME', 'binarymlm_db');
+    define('DB_USER', 'root');
+    define('DB_PASS', '');
+} else {
+    define('DB_HOST', 'localhost');
+    define('DB_NAME', 'binarymlm_db');
+    define('DB_USER', 'binarymlm_db');
+    define('DB_PASS', '9Vltyp*iuF2K_eo7');
+}
 define('DB_CHARSET', 'utf8mb4');
 
+$scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
 define('APP_NAME', 'Binary MLM Admin');
-define('APP_URL', 'http://localhost:2207');
+define('APP_URL', $scheme . '://' . $hostName);
 define('BASE_PATH', dirname(__DIR__));
 
 date_default_timezone_set('Asia/Kolkata');

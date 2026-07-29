@@ -1,8 +1,8 @@
 <?php
 /**
  * Binary MLM - One-time Installer
- * Run once: http://localhost/your-folder/install.php
- * Then DELETE this file.
+ * Run once, then DELETE this file.
+ * Safe to re-run if tables already exist (only resets admin password).
  */
 $host = 'localhost';
 $user = 'root';
@@ -22,36 +22,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $adminEmail = trim($_POST['admin_email'] ?? 'admin@binarymlm.com');
 
     try {
-        $pdo = new PDO("mysql:host=$host;charset=utf8mb4", $user, $pass, [
+        $pdo = new PDO("mysql:host=$host;dbname=$dbName;charset=utf8mb4", $user, $pass, [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         ]);
 
-        $sqlFile = __DIR__ . '/sql/binarymlm_db.sql';
-        if (!file_exists($sqlFile)) {
-            throw new Exception('SQL file not found: sql/binarymlm_db.sql');
-        }
-
-        $sql = file_get_contents($sqlFile);
-        // Replace password placeholder after import
-        $pdo->exec($sql);
+        require_once __DIR__ . '/includes/schema_setup.php';
+        $setup = mlm_run_schema_setup($pdo);
 
         $hash = password_hash($adminPass, PASSWORD_DEFAULT);
-        $stmt = $pdo->prepare('UPDATE admins SET username = ?, email = ?, password = ?, full_name = ? WHERE id = 1');
-        $stmt->execute([$adminUser, $adminEmail, $hash, 'Super Admin']);
+        $check = $pdo->prepare('SELECT id FROM admins WHERE username = ? LIMIT 1');
+        $check->execute([$adminUser]);
+        $existing = $check->fetch(PDO::FETCH_ASSOC);
 
-        $memberHash = password_hash('member123', PASSWORD_DEFAULT);
-        $pdo->prepare('UPDATE members SET password = ? WHERE id = 1')->execute([$memberHash]);
+        if ($existing) {
+            $stmt = $pdo->prepare('UPDATE admins SET email = ?, password = ?, full_name = ? WHERE id = ?');
+            $stmt->execute([$adminEmail, $hash, 'Super Admin', $existing['id']]);
+        } else {
+            $stmt = $pdo->prepare('UPDATE admins SET username = ?, email = ?, password = ?, full_name = ? WHERE id = 1');
+            $stmt->execute([$adminUser, $adminEmail, $hash, 'Super Admin']);
+            if ($stmt->rowCount() === 0) {
+                $pdo->prepare('INSERT INTO admins (username, email, password, full_name) VALUES (?, ?, ?, ?)')
+                    ->execute([$adminUser, $adminEmail, $hash, 'Super Admin']);
+            }
+        }
 
-        // Update config file
-        $configPath = __DIR__ . '/config/database.php';
-        $config = file_get_contents($configPath);
-        $config = preg_replace("/define\('DB_HOST',\s*'[^']*'\)/", "define('DB_HOST', '" . addslashes($host) . "')", $config);
-        $config = preg_replace("/define\('DB_NAME',\s*'[^']*'\)/", "define('DB_NAME', '" . addslashes($dbName) . "')", $config);
-        $config = preg_replace("/define\('DB_USER',\s*'[^']*'\)/", "define('DB_USER', '" . addslashes($user) . "')", $config);
-        $config = preg_replace("/define\('DB_PASS',\s*'[^']*'\)/", "define('DB_PASS', '" . addslashes($pass) . "')", $config);
-        file_put_contents($configPath, $config);
+        try {
+            $memberHash = password_hash('member123', PASSWORD_DEFAULT);
+            $pdo->prepare('UPDATE members SET password = ? WHERE id = 1')->execute([$memberHash]);
+        } catch (Throwable $e) {
+            // optional sample member
+        }
 
-        $success = "Installation complete! Login: <strong>$adminUser</strong> / your password. Delete install.php now.";
+        $success = 'Installation complete! ' . htmlspecialchars($setup['message'])
+            . '<br>Login: <strong>' . htmlspecialchars($adminUser) . '</strong> / your password.'
+            . '<br><strong>Delete install.php now.</strong>';
     } catch (Exception $e) {
         $error = $e->getMessage();
     }
