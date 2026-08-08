@@ -109,10 +109,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $pct = (float) setting('referral_commission_percent', '5');
                     $comm = round($amount * $pct / 100, 2);
                     if ($comm > 0) {
+                        $desc = "Referral bonus from $memberCode";
                         $pdo->prepare('INSERT INTO commissions (member_id, from_member_id, type, amount, description, status) VALUES (?, ?, ?, ?, ?, ?)')
-                            ->execute([$sponsorId, $newId, 'referral', $comm, "Referral bonus from $memberCode", 'paid']);
-                        $pdo->prepare('UPDATE members SET wallet_balance = wallet_balance + ?, total_earnings = total_earnings + ? WHERE id = ?')
-                            ->execute([$comm, $comm, $sponsorId]);
+                            ->execute([$sponsorId, $newId, 'referral', $comm, $desc, 'paid']);
+                        $cid = (int) $pdo->lastInsertId();
+                        wallet_credit($pdo, $sponsorId, 'income', $comm, 'commission', $cid ?: null, $desc);
                     }
                 }
                 closing_on_activation($pdo, [

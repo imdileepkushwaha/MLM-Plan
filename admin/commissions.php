@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../includes/wallet.php';
 $pageTitle = 'Commissions';
 
 // Manual commission add
@@ -14,9 +15,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add')
         $status = $creditWallet ? 'paid' : 'pending';
         $pdo->prepare('INSERT INTO commissions (member_id, type, amount, description, status) VALUES (?,?,?,?,?)')
             ->execute([$memberId, $type, $amount, $description, $status]);
+        $cid = (int) $pdo->lastInsertId();
         if ($creditWallet) {
-            $pdo->prepare('UPDATE members SET wallet_balance = wallet_balance + ?, total_earnings = total_earnings + ? WHERE id = ?')
-                ->execute([$amount, $amount, $memberId]);
+            wallet_credit($pdo, $memberId, 'income', $amount, 'commission', $cid ?: null, $description !== '' ? $description : 'Manual commission');
         }
         log_activity('commission_add', "Added $amount commission to member #$memberId");
         flash('success', 'Commission added.');
@@ -35,9 +36,16 @@ if (isset($_GET['pay'])) {
     $c = $stmt->fetch();
     if ($c) {
         $pdo->prepare("UPDATE commissions SET status = 'paid' WHERE id = ?")->execute([$id]);
-        $pdo->prepare('UPDATE members SET wallet_balance = wallet_balance + ?, total_earnings = total_earnings + ? WHERE id = ?')
-            ->execute([(float)$c['amount'], (float)$c['amount'], (int)$c['member_id']]);
-        flash('success', 'Commission marked as paid and credited to wallet.');
+        wallet_credit(
+            $pdo,
+            (int) $c['member_id'],
+            'income',
+            (float) $c['amount'],
+            'commission',
+            $id,
+            (string) ($c['description'] ?? 'Commission paid')
+        );
+        flash('success', 'Commission marked as paid and credited to Income Wallet.');
     }
     header('Location: commissions.php');
     exit;
@@ -53,11 +61,21 @@ if (isset($_GET['cancel'])) {
         $pdo->prepare("UPDATE commissions SET status = 'cancelled' WHERE id = ?")->execute([$id]);
         if ($c['status'] === 'paid') {
             $amt = (float) $c['amount'];
-            $pdo->prepare('UPDATE members SET wallet_balance = GREATEST(0, wallet_balance - ?), total_earnings = GREATEST(0, total_earnings - ?) WHERE id = ?')
-                ->execute([$amt, $amt, (int) $c['member_id']]);
+            $mid = (int) $c['member_id'];
+            $bal = wallet_balance($pdo, $mid, 'income');
+            $claw = min($amt, $bal);
+            if ($claw > 0) {
+                wallet_debit($pdo, $mid, 'income', $claw, 'commission', $id, 'Commission #' . $id . ' cancelled');
+            }
+            try {
+                $pdo->prepare('UPDATE members SET total_earnings = GREATEST(0, total_earnings - ?) WHERE id = ?')
+                    ->execute([$amt, $mid]);
+            } catch (Throwable $e) {
+                // ignore
+            }
         }
         log_activity('commission_cancel', "Cancelled commission #$id");
-        flash('success', 'Commission cancelled' . ($c['status'] === 'paid' ? ' and wallet adjusted.' : '.'));
+        flash('success', 'Commission cancelled' . ($c['status'] === 'paid' ? ' and Income Wallet adjusted.' : '.'));
     }
     header('Location: commissions.php');
     exit;
@@ -191,7 +209,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <td><?= e(ucfirst($r['type'])) ?></td>
                     <td><?= currency((float)$r['amount']) ?></td>
                     <td><?= e($r['description'] ?? '') ?></td>
-                    <td><span class="badge badge-<?= e($r['status']) ?>"><?= e($r['status']) ?></span></td>
+                    <td><?= status_badge((string) $r['status']) ?></td>
                     <td><?= date('d M Y H:i', strtotime($r['created_at'])) ?></td>
                     <td>
                         <div class="action-icons">

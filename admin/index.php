@@ -226,7 +226,7 @@ $iconOut = '<svg viewBox="0 0 24 24"><polyline points="17 1 21 5 17 9"/><path d=
                         <td><a href="member-view.php?id=<?= (int) $m['id'] ?>"><?= e($m['member_id']) ?></a></td>
                         <td><?= e($m['full_name']) ?></td>
                         <td><?= e($m['package_name'] ?? '—') ?></td>
-                        <td><span class="badge badge-<?= e($m['status']) ?>"><?= e($m['status']) ?></span></td>
+                        <td><?= status_badge((string) $m['status']) ?></td>
                         <td><?= date('d M Y', strtotime($m['join_date'])) ?></td>
                     </tr>
                 <?php endforeach; endif; ?>
@@ -262,7 +262,7 @@ $iconOut = '<svg viewBox="0 0 24 24"><polyline points="17 1 21 5 17 9"/><path d=
                     <td><?= e($c['full_name']) ?> <small>(<?= e($c['mid']) ?>)</small></td>
                     <td><?= e(ucfirst($c['type'])) ?></td>
                     <td><?= currency((float) $c['amount']) ?></td>
-                    <td><span class="badge badge-<?= e($c['status']) ?>"><?= e($c['status']) ?></span></td>
+                    <td><?= status_badge((string) $c['status']) ?></td>
                     <td><?= date('d M Y H:i', strtotime($c['created_at'])) ?></td>
                 </tr>
             <?php endforeach; endif; ?>

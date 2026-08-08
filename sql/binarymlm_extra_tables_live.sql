@@ -170,6 +170,7 @@ CREATE TABLE IF NOT EXISTS products (
     size_id INT NULL,
     color_id INT NULL,
     price DECIMAL(12,2) NOT NULL DEFAULT 0,
+    bv DECIMAL(12,2) NOT NULL DEFAULT 0,
     mrp DECIMAL(12,2) DEFAULT 0,
     discount_percent DECIMAL(8,2) DEFAULT 0,
     offer_flash_text VARCHAR(180) NULL,
@@ -280,7 +281,7 @@ CREATE TABLE IF NOT EXISTS password_resets (
 CREATE TABLE IF NOT EXISTS member_kyc_documents (
     id INT AUTO_INCREMENT PRIMARY KEY,
     member_id INT NOT NULL,
-    doc_type ENUM('pan','bank','aadhar') NOT NULL,
+    doc_type ENUM('pan','bank','aadhar','upi') NOT NULL,
     status ENUM('not_submitted','pending','approved','rejected') NOT NULL DEFAULT 'not_submitted',
     pan_number VARCHAR(20) NULL,
     pan_name VARCHAR(100) NULL,
@@ -296,6 +297,8 @@ CREATE TABLE IF NOT EXISTS member_kyc_documents (
     city VARCHAR(100) NULL,
     area VARCHAR(100) NULL,
     pincode VARCHAR(20) NULL,
+    upi_id VARCHAR(100) NULL,
+    upi_name VARCHAR(50) NULL,
     document_file VARCHAR(255) NULL,
     document_back VARCHAR(255) NULL,
     admin_note TEXT NULL,
@@ -307,6 +310,23 @@ CREATE TABLE IF NOT EXISTS member_kyc_documents (
     KEY idx_kyc_status (status),
     KEY idx_kyc_type (doc_type),
     CONSTRAINT fk_kyc_member FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS member_kyc_upi (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    member_id INT NOT NULL,
+    upi_name VARCHAR(50) NOT NULL,
+    upi_id VARCHAR(100) NOT NULL,
+    document_file VARCHAR(255) NULL,
+    status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+    admin_note TEXT NULL,
+    submitted_at DATETIME NULL,
+    reviewed_at DATETIME NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_member_upi_id (member_id, upi_id),
+    KEY idx_kyc_upi_member (member_id),
+    KEY idx_kyc_upi_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS activation_requests (
@@ -374,4 +394,18 @@ CREATE TABLE IF NOT EXISTS closing_items (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_closing_items_run (closing_id),
     INDEX idx_closing_items_member (member_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS package_products (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    package_id INT NOT NULL,
+    product_id INT NOT NULL,
+    qty INT NOT NULL DEFAULT 1,
+    unit_price DECIMAL(12,2) NOT NULL DEFAULT 0,
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_pkg_product (package_id, product_id),
+    INDEX idx_pp_package (package_id),
+    INDEX idx_pp_product (product_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

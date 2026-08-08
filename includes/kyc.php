@@ -1,6 +1,6 @@
 <?php
 /**
- * User KYC document helpers (PAN / Bank / Aadhaar)
+ * User KYC document helpers (PAN / Bank / Aadhaar / UPI)
  */
 
 function ensure_kyc_documents_table(PDO $pdo): void
@@ -14,7 +14,7 @@ function ensure_kyc_documents_table(PDO $pdo): void
             CREATE TABLE IF NOT EXISTS member_kyc_documents (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 member_id INT NOT NULL,
-                doc_type ENUM('pan','bank','aadhar') NOT NULL,
+                doc_type ENUM('pan','bank','aadhar','upi') NOT NULL,
                 status ENUM('not_submitted','pending','approved','rejected') NOT NULL DEFAULT 'not_submitted',
                 pan_number VARCHAR(20) NULL,
                 pan_name VARCHAR(100) NULL,
@@ -25,6 +25,8 @@ function ensure_kyc_documents_table(PDO $pdo): void
                 branch_name VARCHAR(100) NULL,
                 aadhar_number VARCHAR(20) NULL,
                 address_line TEXT NULL,
+                upi_id VARCHAR(100) NULL,
+                upi_name VARCHAR(50) NULL,
                 document_file VARCHAR(255) NULL,
                 admin_note TEXT NULL,
                 submitted_at DATETIME NULL,
@@ -40,7 +42,14 @@ function ensure_kyc_documents_table(PDO $pdo): void
         // ignore
     }
 
-    // Aadhaar extras (front/back + residential address)
+    // Expand doc_type ENUM for existing installs
+    try {
+        $pdo->exec("ALTER TABLE member_kyc_documents MODIFY COLUMN doc_type ENUM('pan','bank','aadhar','upi') NOT NULL");
+    } catch (Throwable $e) {
+        // ignore
+    }
+
+    // Aadhaar extras + UPI (front/back + residential address + UPI ID)
     $extraCols = [
         'document_back' => 'VARCHAR(255) NULL AFTER document_file',
         'country' => 'VARCHAR(100) NULL AFTER address_line',
@@ -48,6 +57,8 @@ function ensure_kyc_documents_table(PDO $pdo): void
         'city' => 'VARCHAR(100) NULL AFTER state',
         'area' => 'VARCHAR(100) NULL AFTER city',
         'pincode' => 'VARCHAR(20) NULL AFTER area',
+        'upi_id' => 'VARCHAR(100) NULL AFTER pincode',
+        'upi_name' => 'VARCHAR(50) NULL AFTER upi_id',
     ];
     foreach ($extraCols as $col => $def) {
         try {
@@ -61,6 +72,173 @@ function ensure_kyc_documents_table(PDO $pdo): void
     }
 
     $done = true;
+}
+
+/** Common UPI app / wallet names for KYC. */
+function kyc_upi_apps(): array
+{
+    return [
+        'Google Pay',
+        'PhonePe',
+        'Paytm',
+        'BHIM',
+        'Amazon Pay',
+        'WhatsApp Pay',
+        'Cred',
+        'Mobikwik',
+        'Freecharge',
+        'Other',
+    ];
+}
+
+/** Multiple UPI IDs per member. */
+function ensure_kyc_upi_table(PDO $pdo): void
+{
+    static $done = false;
+    if ($done) {
+        return;
+    }
+    ensure_kyc_documents_table($pdo);
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS member_kyc_upi (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                member_id INT NOT NULL,
+                upi_name VARCHAR(50) NOT NULL,
+                upi_id VARCHAR(100) NOT NULL,
+                document_file VARCHAR(255) NULL,
+                status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+                admin_note TEXT NULL,
+                submitted_at DATETIME NULL,
+                reviewed_at DATETIME NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY uk_member_upi_id (member_id, upi_id),
+                KEY idx_kyc_upi_member (member_id),
+                KEY idx_kyc_upi_status (status)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ");
+    } catch (Throwable $e) {
+        // ignore
+    }
+    $done = true;
+}
+
+function kyc_upi_list(PDO $pdo, int $memberId): array
+{
+    ensure_kyc_upi_table($pdo);
+    kyc_upi_migrate_legacy($pdo, $memberId);
+    $stmt = $pdo->prepare('SELECT * FROM member_kyc_upi WHERE member_id = ? ORDER BY id DESC');
+    $stmt->execute([$memberId]);
+    return $stmt->fetchAll() ?: [];
+}
+
+function kyc_upi_get(PDO $pdo, int $id, int $memberId = 0): ?array
+{
+    ensure_kyc_upi_table($pdo);
+    if ($memberId > 0) {
+        $stmt = $pdo->prepare('SELECT * FROM member_kyc_upi WHERE id = ? AND member_id = ? LIMIT 1');
+        $stmt->execute([$id, $memberId]);
+    } else {
+        $stmt = $pdo->prepare('SELECT * FROM member_kyc_upi WHERE id = ? LIMIT 1');
+        $stmt->execute([$id]);
+    }
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+/** Move single legacy UPI from member_kyc_documents into member_kyc_upi once. */
+function kyc_upi_migrate_legacy(PDO $pdo, int $memberId): void
+{
+    ensure_kyc_upi_table($pdo);
+    try {
+        $doc = kyc_get_doc($pdo, $memberId, 'upi');
+        $legacyId = strtolower(trim((string) ($doc['upi_id'] ?? '')));
+        if ($legacyId === '') {
+            return;
+        }
+        $chk = $pdo->prepare('SELECT id FROM member_kyc_upi WHERE member_id = ? AND upi_id = ? LIMIT 1');
+        $chk->execute([$memberId, $legacyId]);
+        if ($chk->fetch()) {
+            return;
+        }
+        $status = strtolower((string) ($doc['status'] ?? 'pending'));
+        if (!in_array($status, ['pending', 'approved', 'rejected'], true)) {
+            $status = 'pending';
+        }
+        $pdo->prepare('INSERT INTO member_kyc_upi
+            (member_id, upi_name, upi_id, document_file, status, admin_note, submitted_at, reviewed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+            ->execute([
+                $memberId,
+                (string) ($doc['upi_name'] ?? 'Other') ?: 'Other',
+                $legacyId,
+                $doc['document_file'] ?? null,
+                $status,
+                $doc['admin_note'] ?? null,
+                $doc['submitted_at'] ?? date('Y-m-d H:i:s'),
+                $doc['reviewed_at'] ?? null,
+            ]);
+    } catch (Throwable $e) {
+        // ignore
+    }
+}
+
+/** Sync parent KYC "upi" document status from multiple UPI rows. */
+function kyc_upi_sync_parent(PDO $pdo, int $memberId): void
+{
+    ensure_kyc_upi_table($pdo);
+    kyc_ensure_member_rows($pdo, $memberId);
+
+    $stmt = $pdo->prepare('SELECT * FROM member_kyc_upi WHERE member_id = ? ORDER BY
+        CASE status WHEN \'approved\' THEN 0 WHEN \'pending\' THEN 1 WHEN \'rejected\' THEN 2 ELSE 3 END, id DESC');
+    $stmt->execute([$memberId]);
+    $rows = $stmt->fetchAll() ?: [];
+
+    $status = 'not_submitted';
+    $upiName = null;
+    $upiId = null;
+    $docFile = null;
+    $submittedAt = null;
+    $reviewedAt = null;
+    $adminNote = null;
+
+    if ($rows) {
+        $statuses = array_column($rows, 'status');
+        $hasPending = in_array('pending', $statuses, true);
+        $hasApproved = in_array('approved', $statuses, true);
+        $hasRejected = in_array('rejected', $statuses, true);
+
+        if ($hasPending) {
+            $status = 'pending';
+        } elseif ($hasApproved) {
+            $status = 'approved';
+        } elseif ($hasRejected) {
+            $status = 'rejected';
+        }
+
+        $primary = $rows[0];
+        foreach ($rows as $r) {
+            if (($r['status'] ?? '') === 'approved') {
+                $primary = $r;
+                break;
+            }
+        }
+        $upiName = $primary['upi_name'] ?? null;
+        $upiId = $primary['upi_id'] ?? null;
+        $docFile = $primary['document_file'] ?? null;
+        $submittedAt = $primary['submitted_at'] ?? null;
+        $reviewedAt = $primary['reviewed_at'] ?? null;
+        $adminNote = $primary['admin_note'] ?? null;
+    }
+
+    $pdo->prepare('UPDATE member_kyc_documents SET
+        upi_name = ?, upi_id = ?, document_file = ?, status = ?,
+        admin_note = ?, submitted_at = ?, reviewed_at = ?
+        WHERE member_id = ? AND doc_type = \'upi\'')
+        ->execute([$upiName, $upiId, $docFile, $status, $adminNote, $submittedAt, $reviewedAt, $memberId]);
+
+    kyc_sync_member_status($pdo, $memberId);
 }
 
 function kyc_doc_types(): array
@@ -83,6 +261,12 @@ function kyc_doc_types(): array
             'page' => 'kyc-aadhar.php',
             'title' => 'Address Proof / Aadhaar',
             'desc' => 'Upload Aadhaar or address proof for KYC verification.',
+        ],
+        'upi' => [
+            'label' => 'UPI Details',
+            'page' => 'kyc-upi.php',
+            'title' => 'UPI Details',
+            'desc' => 'Add one or more UPI IDs for faster withdrawals and payouts.',
         ],
     ];
 }
@@ -121,6 +305,11 @@ function kyc_get_all(PDO $pdo, int $memberId): array
 function kyc_incomplete_count(PDO $pdo, int $memberId): int
 {
     kyc_ensure_member_rows($pdo, $memberId);
+    try {
+        ensure_kyc_upi_table($pdo);
+    } catch (Throwable $e) {
+        // ignore
+    }
     $stmt = $pdo->prepare("SELECT COUNT(*) FROM member_kyc_documents WHERE member_id = ? AND status != 'approved'");
     $stmt->execute([$memberId]);
     return (int) $stmt->fetchColumn();
@@ -229,7 +418,8 @@ function kyc_sync_member_status(PDO $pdo, int $memberId): void
     $stmt = $pdo->prepare('SELECT status FROM member_kyc_documents WHERE member_id = ?');
     $stmt->execute([$memberId]);
     $statuses = $stmt->fetchAll(PDO::FETCH_COLUMN);
-    if (count($statuses) < 3) {
+    $expected = count(kyc_doc_types());
+    if (count($statuses) < $expected) {
         kyc_ensure_member_rows($pdo, $memberId);
         $stmt->execute([$memberId]);
         $statuses = $stmt->fetchAll(PDO::FETCH_COLUMN);

@@ -1,6 +1,19 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
-$pageTitle = 'Packages';
+require_once __DIR__ . '/../includes/package_products.php';
+$pageTitle = 'Add Packages';
+
+package_products_ensure_table($pdo);
+
+// Ensure capping column exists
+try {
+    $col = $pdo->query("SHOW COLUMNS FROM packages LIKE 'capping'")->fetch();
+    if (!$col) {
+        $pdo->exec("ALTER TABLE packages ADD COLUMN capping DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER bv");
+    }
+} catch (Throwable $e) {
+    // ignore
+}
 
 // Delete
 if (isset($_GET['delete'])) {
@@ -33,8 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = trim($_POST['name'] ?? '');
     $amount = (float) ($_POST['amount'] ?? 0);
     $bv = (float) ($_POST['bv'] ?? 0);
-    $dailyRoi = (float) ($_POST['daily_roi'] ?? 0);
-    $validityDays = (int) ($_POST['validity_days'] ?? 0);
+    $capping = (float) ($_POST['capping'] ?? 0);
     $description = trim($_POST['description'] ?? '');
     $status = ($_POST['status'] ?? 'active') === 'inactive' ? 'inactive' : 'active';
 
@@ -50,22 +62,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($bv === 0.0 && $amount > 0) {
         $bv = $amount;
     }
-    if ($dailyRoi < 0) {
-        $errors[] = 'Daily ROI cannot be negative.';
-    }
-    if ($validityDays < 1) {
-        $errors[] = 'Validity days must be at least 1.';
+    if ($capping < 0) {
+        $errors[] = 'Capping cannot be negative.';
     }
 
     if (!$errors) {
         if ($id > 0) {
-            $pdo->prepare('UPDATE packages SET name=?, amount=?, bv=?, daily_roi=?, validity_days=?, description=?, status=? WHERE id=?')
-                ->execute([$name, $amount, $bv, $dailyRoi, $validityDays, $description, $status, $id]);
+            $pdo->prepare('UPDATE packages SET name=?, amount=?, bv=?, capping=?, description=?, status=? WHERE id=?')
+                ->execute([$name, $amount, $bv, $capping, $description, $status, $id]);
             log_activity('package_edit', "Updated package #$id");
             flash('success', 'Package updated.');
         } else {
-            $pdo->prepare('INSERT INTO packages (name, amount, bv, daily_roi, validity_days, description, status) VALUES (?,?,?,?,?,?,?)')
-                ->execute([$name, $amount, $bv, $dailyRoi, $validityDays, $description, $status]);
+            $pdo->prepare('INSERT INTO packages (name, amount, bv, capping, daily_roi, validity_days, description, status) VALUES (?,?,?,?,0,30,?,?)')
+                ->execute([$name, $amount, $bv, $capping, $description, $status]);
             log_activity('package_add', "Added package $name");
             flash('success', 'Package added.');
         }
@@ -81,13 +90,18 @@ if (isset($_GET['edit'])) {
     $edit = $stmt->fetch();
 }
 
-$packages = $pdo->query('SELECT p.*, (SELECT COUNT(*) FROM members m WHERE m.package_id = p.id) AS member_count FROM packages p ORDER BY p.amount')->fetchAll();
+$packages = $pdo->query('
+    SELECT p.*,
+           (SELECT COUNT(*) FROM members m WHERE m.package_id = p.id) AS member_count,
+           (SELECT COUNT(*) FROM package_products pp WHERE pp.package_id = p.id) AS product_count
+    FROM packages p
+    ORDER BY p.amount
+')->fetchAll();
 
 $formName = $edit['name'] ?? $_POST['name'] ?? '';
 $formAmount = $edit['amount'] ?? $_POST['amount'] ?? '';
 $formBv = $edit['bv'] ?? $_POST['bv'] ?? '';
-$formRoi = $edit['daily_roi'] ?? $_POST['daily_roi'] ?? '1.00';
-$formDays = $edit['validity_days'] ?? $_POST['validity_days'] ?? '30';
+$formCapping = $edit['capping'] ?? $_POST['capping'] ?? '';
 $formDesc = $edit['description'] ?? $_POST['description'] ?? '';
 $formStatus = $edit['status'] ?? $_POST['status'] ?? 'active';
 
@@ -98,7 +112,7 @@ require_once __DIR__ . '/../includes/header.php';
     <div class="panel-header">
         <div>
             <h2><?= $edit ? 'Edit Package' : 'Add Package' ?></h2>
-            <p class="members-sub">Plan name, investment, BV, daily ROI, validity and description</p>
+            <p class="members-sub">Plan name, investment, BV, capping and description</p>
         </div>
         <?php if ($edit): ?>
         <a href="packages.php" class="btn btn-outline btn-sm">Cancel edit</a>
@@ -123,12 +137,9 @@ require_once __DIR__ . '/../includes/header.php';
                     <small class="field-hint">Leave blank to use investment amount</small>
                 </div>
                 <div class="form-group">
-                    <label>Daily ROI (%) *</label>
-                    <input type="number" step="0.01" min="0" name="daily_roi" value="<?= e((string) $formRoi) ?>" required>
-                </div>
-                <div class="form-group">
-                    <label>Validity (Days) *</label>
-                    <input type="number" step="1" min="1" name="validity_days" value="<?= e((string) $formDays) ?>" required>
+                    <label>Capping (₹)</label>
+                    <input type="number" step="0.01" min="0" name="capping" value="<?= e((string) $formCapping) ?>" placeholder="e.g. 50000">
+                    <small class="field-hint">Max earning limit for this package (0 = no limit)</small>
                 </div>
                 <div class="form-group">
                     <label>Status</label>
@@ -163,6 +174,7 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
 <?php else: foreach ($packages as $p):
     $isActive = ($p['status'] === 'active');
+    $cap = (float) ($p['capping'] ?? 0);
 ?>
     <article class="pkg-card <?= $isActive ? '' : 'is-inactive' ?>">
         <div class="pkg-card-top">
@@ -189,20 +201,29 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
             <div class="pkg-metric">
                 <span class="pkg-metric-ico green">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l6-6 4 4 7-7"/><path d="M14 8h7v7"/></svg>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M4 8h8a4 4 0 010 8H4"/><path d="M4 12h16"/></svg>
                 </span>
                 <div>
-                    <strong><?= number_format((float) $p['daily_roi'], 2) ?>%</strong>
-                    <span>Daily ROI</span>
+                    <strong><?= $cap > 0 ? currency($cap) : 'No limit' ?></strong>
+                    <span>Capping</span>
+                </div>
+            </div>
+            <div class="pkg-metric">
+                <span class="pkg-metric-ico purple">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                </span>
+                <div>
+                    <strong><?= (int) ($p['product_count'] ?? 0) ?></strong>
+                    <span><?= (int) ($p['product_count'] ?? 0) === 1 ? 'Product' : 'Products' ?></span>
                 </div>
             </div>
             <div class="pkg-metric">
                 <span class="pkg-metric-ico orange">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
                 </span>
                 <div>
-                    <strong><?= (int) $p['validity_days'] ?></strong>
-                    <span>Days</span>
+                    <strong><?= (int) ($p['member_count'] ?? 0) ?></strong>
+                    <span>Members</span>
                 </div>
             </div>
         </div>

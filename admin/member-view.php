@@ -88,7 +88,7 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="mv-hero-info">
             <div class="mv-id-row">
                 <span class="mv-id"><?= e($member['member_id']) ?></span>
-                <span class="badge badge-<?= e($member['status']) ?>"><?= e($member['status']) ?></span>
+                <?= status_badge((string) $member['status']) ?>
             </div>
             <h2><?= e($member['full_name']) ?></h2>
             <p>@<?= e($member['username']) ?> · Joined <?= date('d M Y', strtotime($member['join_date'])) ?></p>
@@ -268,7 +268,7 @@ require_once __DIR__ . '/../includes/header.php';
                             <?php endif; ?>
                         </td>
                         <td><strong><?= currency((float)$c['amount']) ?></strong></td>
-                        <td><span class="badge badge-<?= e($c['status']) ?>"><?= e($c['status']) ?></span></td>
+                        <td><?= status_badge((string) $c['status']) ?></td>
                         <td><span class="muted"><?= date('d M Y', strtotime($c['created_at'])) ?></span></td>
                     </tr>
                 <?php endforeach; endif; ?>
@@ -292,7 +292,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <tr>
                         <td><strong><?= currency((float)$w['amount']) ?></strong></td>
                         <td><?= currency(wd_net_display($w)) ?></td>
-                        <td><span class="badge badge-<?= e($w['status']) ?>"><?= e($w['status']) ?></span></td>
+                        <td><?= status_badge((string) $w['status']) ?></td>
                         <td><span class="muted"><?= date('d M Y', strtotime($w['requested_at'])) ?></span></td>
                     </tr>
                 <?php endforeach; endif; ?>

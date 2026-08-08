@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/utility.php';
 $pageTitle = 'Add Product';
+products_ensure_columns($pdo);
 
 $uploadDir = dirname(__DIR__) . '/uploads/products';
 if (!is_dir($uploadDir)) {
@@ -91,6 +92,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $colorId = (int) ($_POST['color_id'] ?? 0) ?: null;
     $status = ($_POST['status'] ?? 'active') === 'inactive' ? 'inactive' : 'active';
     $price = (float) ($_POST['price'] ?? 0);
+    $bv = (float) ($_POST['bv'] ?? 0);
     $mrp = (float) ($_POST['mrp'] ?? 0);
     $discount = 0.0;
     if ($mrp > 0 && $price >= 0 && $price <= $mrp) {
@@ -101,20 +103,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $offerFlash = trim($_POST['offer_flash_text'] ?? '');
     $offerCountdown = trim($_POST['offer_countdown'] ?? '');
     $offerBank = trim($_POST['offer_bank_text'] ?? '');
-    $stockQty = (int) ($_POST['stock_qty'] ?? 0);
-    $metaTitle = trim($_POST['meta_title'] ?? '');
-    $metaDescription = trim($_POST['meta_description'] ?? '');
-    $weight = (float) ($_POST['weight'] ?? 0);
-    $length = (float) ($_POST['length'] ?? 0);
-    $width = (float) ($_POST['width'] ?? 0);
-    $height = (float) ($_POST['height'] ?? 0);
+    $stockQty = 0;
+    // Meta / shipping / stock UI removed — keep existing values on edit, defaults on create
+    $metaTitle = '';
+    $metaDescription = '';
+    $weight = 0.0;
+    $length = 0.0;
+    $width = 0.0;
+    $height = 0.0;
+    if ($id > 0) {
+        $keep = $pdo->prepare('SELECT stock_qty, meta_title, meta_description, weight, length, width, height FROM products WHERE id = ?');
+        $keep->execute([$id]);
+        $prev = $keep->fetch() ?: [];
+        $stockQty = (int) ($prev['stock_qty'] ?? 0);
+        $metaTitle = (string) ($prev['meta_title'] ?? '');
+        $metaDescription = (string) ($prev['meta_description'] ?? '');
+        $weight = (float) ($prev['weight'] ?? 0);
+        $length = (float) ($prev['length'] ?? 0);
+        $width = (float) ($prev['width'] ?? 0);
+        $height = (float) ($prev['height'] ?? 0);
+    }
 
     $wordCount = preg_match_all('/\S+/u', $name) ?: 0;
     if ($name === '' || $wordCount < 2) {
         $errors[] = 'Product title me kam se kam 2 shabd hone chahiye.';
     }
     if ($price < 0) $errors[] = 'Price cannot be negative.';
-    if ($stockQty < 0) $errors[] = 'Stock cannot be negative.';
+    if ($bv < 0) $errors[] = 'BV cannot be negative.';
     if ($skuMode === 'manual' && $sku === '') {
         $errors[] = 'Manual SKU mode me SKU required hai.';
     }
@@ -159,13 +174,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->prepare('
                     UPDATE products SET
                         name=?, slug=?, sku=?, sku_mode=?, category_id=?, subcategory_id=?, size_id=?, color_id=?,
-                        price=?, mrp=?, discount_percent=?, offer_flash_text=?, offer_countdown=?, offer_bank_text=?,
+                        price=?, bv=?, mrp=?, discount_percent=?, offer_flash_text=?, offer_countdown=?, offer_bank_text=?,
                         stock_qty=?, description=?, thumbnail=?,
                         meta_title=?, meta_description=?, weight=?, length=?, width=?, height=?, status=?
                     WHERE id=?
                 ')->execute([
                     $name, $slug, $sku ?: null, $skuMode, $categoryId, $subcategoryId, $sizeId, $colorId,
-                    $price, $mrp, $discount, $offerFlash ?: null, $offerCountdown ?: null, $offerBank ?: null,
+                    $price, $bv, $mrp, $discount, $offerFlash ?: null, $offerCountdown ?: null, $offerBank ?: null,
                     $stockQty, $description ?: null, $thumbPath,
                     $metaTitle ?: null, $metaDescription ?: null, $weight, $length, $width, $height, $status, $id
                 ]);
@@ -176,13 +191,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->prepare('
                     INSERT INTO products (
                         name, slug, sku, sku_mode, category_id, subcategory_id, size_id, color_id,
-                        price, mrp, discount_percent, offer_flash_text, offer_countdown, offer_bank_text,
+                        price, bv, mrp, discount_percent, offer_flash_text, offer_countdown, offer_bank_text,
                         stock_qty, description, thumbnail,
                         meta_title, meta_description, weight, length, width, height, status
-                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ')->execute([
                     $name, $slug, $sku ?: null, $skuMode, $categoryId, $subcategoryId, $sizeId, $colorId,
-                    $price, $mrp, $discount, $offerFlash ?: null, $offerCountdown ?: null, $offerBank ?: null,
+                    $price, $bv, $mrp, $discount, $offerFlash ?: null, $offerCountdown ?: null, $offerBank ?: null,
                     $stockQty, $description ?: null, $thumbPath,
                     $metaTitle ?: null, $metaDescription ?: null, $weight, $length, $width, $height, $status
                 ]);
@@ -243,6 +258,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'size_id' => $sizeId,
         'color_id' => $colorId,
         'price' => $price,
+        'bv' => $bv,
         'mrp' => $mrp,
         'discount_percent' => $discount,
         'offer_flash_text' => $offerFlash,
@@ -302,20 +318,6 @@ require_once __DIR__ . '/../includes/header.php';
             <span>
                 <strong>Selling prices</strong>
                 <small>basic price &amp; discount</small>
-            </span>
-        </button>
-        <button type="button" class="pf-nav-item" data-pf-step="5">
-            <span class="pf-nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg></span>
-            <span>
-                <strong>Advance</strong>
-                <small>Meta details &amp; Inventory</small>
-            </span>
-        </button>
-        <button type="button" class="pf-nav-item" data-pf-step="6">
-            <span class="pf-nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg></span>
-            <span>
-                <strong>Shipping</strong>
-                <small>weight &amp; dimensions</small>
             </span>
         </button>
     </aside>
@@ -546,9 +548,14 @@ require_once __DIR__ . '/../includes/header.php';
                             <input type="number" step="0.01" min="0" name="price" id="pfPrice" value="<?= e((string)$v('price', '0')) ?>" required>
                         </div>
                         <div class="form-group">
+                            <label>BV (Business Volume)</label>
+                            <input type="number" step="0.01" min="0" name="bv" id="pfBv" value="<?= e((string)$v('bv', '0')) ?>" placeholder="0.00">
+                            <!-- <p class="pf-help">Is product ka BV value — package / commission ke liye.</p> -->
+                        </div>
+                        <div class="form-group">
                             <label>Discount % <span class="pf-auto-tag">Auto</span></label>
                             <input type="number" step="0.01" name="discount_percent" id="pfDiscount" value="<?= e((string)$v('discount_percent', '0')) ?>" readonly class="pf-readonly">
-                            <p class="pf-help">MRP aur Selling Price se auto calculate hota hai.</p>
+                            <!-- <p class="pf-help">MRP aur Selling Price se auto calculate hota hai.</p> -->
                         </div>
                     </div>
                 </div>
@@ -573,58 +580,6 @@ require_once __DIR__ . '/../includes/header.php';
                         <div class="form-group" style="grid-column:1/-1">
                             <label>Card / Bank Offer Text</label>
                             <input type="text" name="offer_bank_text" value="<?= e((string)$v('offer_bank_text', '')) ?>" placeholder="Extra 10% off with HDFC card">
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Step 5 -->
-            <section class="pf-step" data-step="5" hidden>
-                <div class="pf-card">
-                    <div class="pf-card-head">
-                        <span class="pf-card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg></span>
-                        <h2>Advance</h2>
-                    </div>
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label>Stock Qty</label>
-                            <input type="number" name="stock_qty" value="<?= (int)$v('stock_qty', 0) ?>">
-                        </div>
-                        <div class="form-group">
-                            <label>Meta Title</label>
-                            <input type="text" name="meta_title" value="<?= e((string)$v('meta_title', '')) ?>" placeholder="SEO title">
-                        </div>
-                        <div class="form-group" style="grid-column:1/-1">
-                            <label>Meta Description</label>
-                            <textarea name="meta_description" rows="3" placeholder="SEO description"><?= e((string)$v('meta_description', '')) ?></textarea>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Step 6 -->
-            <section class="pf-step" data-step="6" hidden>
-                <div class="pf-card">
-                    <div class="pf-card-head">
-                        <span class="pf-card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg></span>
-                        <h2>Shipping</h2>
-                    </div>
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label>Weight (kg)</label>
-                            <input type="number" step="0.01" name="weight" value="<?= e((string)$v('weight', '0')) ?>">
-                        </div>
-                        <div class="form-group">
-                            <label>Length (cm)</label>
-                            <input type="number" step="0.01" name="length" value="<?= e((string)$v('length', '0')) ?>">
-                        </div>
-                        <div class="form-group">
-                            <label>Width (cm)</label>
-                            <input type="number" step="0.01" name="width" value="<?= e((string)$v('width', '0')) ?>">
-                        </div>
-                        <div class="form-group">
-                            <label>Height (cm)</label>
-                            <input type="number" step="0.01" name="height" value="<?= e((string)$v('height', '0')) ?>">
                         </div>
                     </div>
                 </div>

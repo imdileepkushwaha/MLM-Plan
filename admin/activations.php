@@ -328,7 +328,7 @@ require_once __DIR__ . '/../includes/header.php';
                         —
                         <?php endif; ?>
                     </td>
-                    <td><span class="badge badge-<?= e($r['status']) ?>"><?= e($r['status']) ?></span></td>
+                    <td><?= status_badge((string) $r['status']) ?></td>
                     <td><?= !empty($r['created_at']) ? date('d M Y H:i', strtotime((string) $r['created_at'])) : '—' ?></td>
                     <td>
                         <?php if ($r['status'] === 'pending'): ?>

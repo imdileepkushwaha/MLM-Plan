@@ -26,8 +26,21 @@ $productPages = [
 ];
 $productOpen = in_array($currentPage, $productPages, true);
 
+$packagePages = ['packages', 'package-assign-products'];
+$packageOpen = in_array($currentPage, $packagePages, true);
+
+$reportPages = [
+    'reports', 'report-commission', 'report-joining', 'report-package-sales',
+    'report-top-earners', 'report-binary-closing', 'tds-report', 'stock-report', 'tpin-report',
+];
+$reportOpen = in_array($currentPage, $reportPages, true);
+
+$tpinPages = ['tpin', 'tpin-transfer', 'tpin-report'];
+$tpinOpen = in_array($currentPage, $tpinPages, true);
+
 $notifyCount = 0;
 $actNotifyCount = 0;
+$topupNotifyCount = 0;
 try {
     $notifyCount = (int) $pdo->query("SELECT COUNT(*) FROM withdrawals WHERE status = 'pending'")->fetchColumn();
 } catch (Throwable $e) {
@@ -39,7 +52,13 @@ try {
 } catch (Throwable $e) {
     $actNotifyCount = 0;
 }
-$totalNotifyCount = $notifyCount + $actNotifyCount;
+try {
+    require_once __DIR__ . '/wallet_topup.php';
+    $topupNotifyCount = wallet_topup_pending_count($pdo);
+} catch (Throwable $e) {
+    $topupNotifyCount = 0;
+}
+$totalNotifyCount = $notifyCount + $actNotifyCount + $topupNotifyCount;
 $adminUsername = $_SESSION['admin_username'] ?? 'admin';
 
 function nav_ico(string $svg): string
@@ -169,13 +188,19 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
                     </div>
                 </div>
 
-                <a href="packages.php" class="nav-link <?= $currentPage === 'packages' ? 'active' : '' ?>">
-                    <span class="nav-link-left">
-                        <?= nav_ico($icoPkg) ?>
-                        <span class="nav-label">Packages</span>
-                    </span>
-                    <?= $chevronDown ?>
-                </a>
+                <div class="nav-group <?= $packageOpen ? 'open' : '' ?>" data-nav-group>
+                    <button type="button" class="nav-link nav-group-toggle <?= $packageOpen ? 'active' : '' ?>" data-nav-toggle>
+                        <span class="nav-link-left">
+                            <?= nav_ico($icoPkg) ?>
+                            <span class="nav-label">Packages</span>
+                        </span>
+                        <?= $chevronDown ?>
+                    </button>
+                    <div class="nav-submenu">
+                        <a href="packages.php" class="<?= $currentPage === 'packages' ? 'active' : '' ?>"><span class="dot"></span>Add Packages</a>
+                        <a href="package-assign-products.php" class="<?= $currentPage === 'package-assign-products' ? 'active' : '' ?>"><span class="dot"></span>Assign Product</a>
+                    </div>
+                </div>
 
                 <a href="activations.php" class="nav-link <?= $currentPage === 'activations' ? 'active' : '' ?>">
                     <span class="nav-link-left">
@@ -187,12 +212,20 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
                     <?php endif; ?>
                 </a>
 
-                <a href="tpin.php" class="nav-link <?= $currentPage === 'tpin' ? 'active' : '' ?>">
-                    <span class="nav-link-left">
-                        <?= nav_ico($icoCard) ?>
-                        <span class="nav-label">T-Pin</span>
-                    </span>
-                </a>
+                <div class="nav-group <?= $tpinOpen ? 'open' : '' ?>" data-nav-group>
+                    <button type="button" class="nav-link nav-group-toggle <?= $tpinOpen ? 'active' : '' ?>" data-nav-toggle>
+                        <span class="nav-link-left">
+                            <?= nav_ico($icoCard) ?>
+                            <span class="nav-label">T-Pin Management</span>
+                        </span>
+                        <?= $chevronDown ?>
+                    </button>
+                    <div class="nav-submenu">
+                        <a href="tpin.php" class="<?= $currentPage === 'tpin' ? 'active' : '' ?>"><span class="dot"></span>Add T-Pin</a>
+                        <a href="tpin-transfer.php" class="<?= $currentPage === 'tpin-transfer' ? 'active' : '' ?>"><span class="dot"></span>Transfer T-Pin</a>
+                        <a href="tpin-report.php" class="<?= $currentPage === 'tpin-report' ? 'active' : '' ?>"><span class="dot"></span>T-Pin Report</a>
+                    </div>
+                </div>
 
                 <a href="commissions.php" class="nav-link <?= $currentPage === 'commissions' ? 'active' : '' ?>">
                     <span class="nav-link-left">
@@ -208,20 +241,49 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
                     </span>
                 </a>
 
-                <a href="withdrawals.php" class="nav-link <?= in_array($currentPage, ['withdrawals', 'tds-report'], true) ? 'active' : '' ?>">
+                <a href="withdrawals.php" class="nav-link <?= $currentPage === 'withdrawals' ? 'active' : '' ?>">
                     <span class="nav-link-left">
                         <?= nav_ico($icoCard) ?>
                         <span class="nav-label">Withdrawals</span>
                     </span>
                 </a>
 
-                <a href="reports.php" class="nav-link <?= $currentPage === 'reports' ? 'active' : '' ?>">
+                <a href="wallets.php" class="nav-link <?= $currentPage === 'wallets' ? 'active' : '' ?>">
                     <span class="nav-link-left">
-                        <?= nav_ico($icoChart) ?>
-                        <span class="nav-label">Reports</span>
+                        <?= nav_ico($icoMoney) ?>
+                        <span class="nav-label">Wallets</span>
                     </span>
-                    <?= $chevronDown ?>
                 </a>
+
+                <a href="wallet-topup-requests.php" class="nav-link <?= $currentPage === 'wallet-topup-requests' ? 'active' : '' ?>">
+                    <span class="nav-link-left">
+                        <?= nav_ico($icoMoney) ?>
+                        <span class="nav-label">Topup Requests</span>
+                    </span>
+                    <?php if ($topupNotifyCount > 0): ?>
+                    <span class="nav-badge"><?= $topupNotifyCount > 9 ? '9+' : $topupNotifyCount ?></span>
+                    <?php endif; ?>
+                </a>
+
+                <div class="nav-group <?= $reportOpen ? 'open' : '' ?>" data-nav-group>
+                    <button type="button" class="nav-link nav-group-toggle <?= $reportOpen ? 'active' : '' ?>" data-nav-toggle>
+                        <span class="nav-link-left">
+                            <?= nav_ico($icoChart) ?>
+                            <span class="nav-label">Reports</span>
+                        </span>
+                        <?= $chevronDown ?>
+                    </button>
+                    <div class="nav-submenu">
+                        <a href="reports.php" class="<?= $currentPage === 'reports' ? 'active' : '' ?>"><span class="dot"></span>Overview</a>
+                        <a href="report-commission.php" class="<?= $currentPage === 'report-commission' ? 'active' : '' ?>"><span class="dot"></span>Commission Report</a>
+                        <a href="report-joining.php" class="<?= $currentPage === 'report-joining' ? 'active' : '' ?>"><span class="dot"></span>Joining Report</a>
+                        <a href="report-package-sales.php" class="<?= $currentPage === 'report-package-sales' ? 'active' : '' ?>"><span class="dot"></span>Package Sales</a>
+                        <a href="report-top-earners.php" class="<?= $currentPage === 'report-top-earners' ? 'active' : '' ?>"><span class="dot"></span>Top Earners</a>
+                        <a href="report-binary-closing.php" class="<?= $currentPage === 'report-binary-closing' ? 'active' : '' ?>"><span class="dot"></span>Binary Closing</a>
+                        <a href="tds-report.php" class="<?= $currentPage === 'tds-report' ? 'active' : '' ?>"><span class="dot"></span>TDS Report</a>
+                        
+                    </div>
+                </div>
 
                 <a href="settings.php" class="nav-link <?= $currentPage === 'settings' ? 'active' : '' ?>">
                     <span class="nav-link-left">
@@ -271,6 +333,15 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
                             </div>
                         </a>
                         <?php endif; ?>
+                        <?php if ($topupNotifyCount > 0): ?>
+                        <a href="wallet-topup-requests.php?status=pending" class="dropdown-item">
+                            <span class="ni red"></span>
+                            <div>
+                                <strong><?= $topupNotifyCount ?> pending topup<?= $topupNotifyCount > 1 ? 's' : '' ?></strong>
+                                <small>Credit Topup Wallet</small>
+                            </div>
+                        </a>
+                        <?php endif; ?>
                         <?php if ($notifyCount > 0): ?>
                         <a href="withdrawals.php?status=pending" class="dropdown-item">
                             <span class="ni red"></span>
@@ -283,7 +354,7 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
                         <?php else: ?>
                         <div class="dropdown-empty">No new notifications</div>
                         <?php endif; ?>
-                        <a href="activations.php?status=pending" class="dropdown-foot">View activations</a>
+                        <a href="wallet-topup-requests.php?status=pending" class="dropdown-foot">View topup requests</a>
                     </div>
                 </div>
 
@@ -355,6 +426,15 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
                 } else {
                     $breadcrumbs[] = ['label' => $pageLabel, 'href' => null];
                 }
+            } elseif ($packageOpen) {
+                $breadcrumbs[] = ['label' => 'Packages', 'href' => 'packages.php'];
+                $breadcrumbs[] = ['label' => $pageLabel, 'href' => null];
+            } elseif ($reportOpen) {
+                $breadcrumbs[] = ['label' => 'Reports', 'href' => 'reports.php'];
+                $breadcrumbs[] = ['label' => $pageLabel, 'href' => null];
+            } elseif ($tpinOpen) {
+                $breadcrumbs[] = ['label' => 'T-Pin Management', 'href' => 'tpin.php'];
+                $breadcrumbs[] = ['label' => $pageLabel, 'href' => null];
             } else {
                 $breadcrumbs[] = ['label' => $pageLabel, 'href' => null];
             }

@@ -115,9 +115,9 @@ try {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
             </span>
             <div class="up-stat-copy">
-                <div class="up-stat-label">Wallet Balance</div>
+                <div class="up-stat-label">Income Wallet</div>
                 <div class="up-stat-value"><?= currency((float) $user['wallet_balance']) ?></div>
-                <div class="up-stat-foot"><span>+ ready</span> Available payout</div>
+                <div class="up-stat-foot"><a href="wallet.php">All wallets</a> · Available payout</div>
             </div>
         </div>
     </article>

@@ -179,7 +179,7 @@ require_once __DIR__ . '/../includes/header.php';
                             <span class="muted">No package</span>
                         <?php endif; ?>
                     </td>
-                    <td><span class="badge badge-<?= e($m['status']) ?>"><?= e($m['status']) ?></span></td>
+                    <td><?= status_badge((string) $m['status']) ?></td>
                     <td><span class="muted"><?= !empty($m['join_date']) ? date('d M Y', strtotime((string) $m['join_date'])) : '—' ?></span></td>
                     <td>
                         <div class="action-icons" style="justify-content:flex-end">

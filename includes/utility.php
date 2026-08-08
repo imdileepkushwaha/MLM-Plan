@@ -43,7 +43,26 @@ function utility_delete(PDO $pdo, string $table, int $id): bool
 
 function status_badge(string $status): string
 {
-    return '<span class="badge badge-' . e($status) . '">' . e($status) . '</span>';
+    $raw = trim($status);
+    $key = strtolower(str_replace([' ', '-'], '_', $raw));
+    // Normalize common aliases to shared color classes
+    $map = [
+        'deactive' => 'inactive',
+        'deactivated' => 'inactive',
+        'disabled' => 'inactive',
+        'reject' => 'rejected',
+        'declined' => 'rejected',
+        'canceled' => 'cancelled',
+        'process' => 'processing',
+        'inprogress' => 'processing',
+        'in_progress' => 'processing',
+        'waiting' => 'pending',
+        'ok' => 'success',
+        'enabled' => 'active',
+    ];
+    $class = $map[$key] ?? $key;
+    $label = $raw !== '' ? $raw : '—';
+    return '<span class="badge badge-' . e($class) . '">' . e($label) . '</span>';
 }
 
 function icon_svg(string $name): string
@@ -129,6 +148,24 @@ function bank_accounts_ensure_columns(PDO $pdo): void
         } catch (Throwable $e) {
             // ignore
         }
+    }
+    $done = true;
+}
+
+/** Ensure products has bv column. */
+function products_ensure_columns(PDO $pdo): void
+{
+    static $done = false;
+    if ($done) {
+        return;
+    }
+    try {
+        $exists = $pdo->query("SHOW COLUMNS FROM products LIKE 'bv'")->fetch();
+        if (!$exists) {
+            $pdo->exec('ALTER TABLE products ADD COLUMN bv DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER price');
+        }
+    } catch (Throwable $e) {
+        // ignore
     }
     $done = true;
 }

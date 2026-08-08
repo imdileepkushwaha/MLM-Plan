@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS packages (
     name VARCHAR(100) NOT NULL,
     amount DECIMAL(12,2) NOT NULL,
     bv DECIMAL(12,2) NOT NULL DEFAULT 0 COMMENT 'Business Volume',
+    capping DECIMAL(12,2) NOT NULL DEFAULT 0 COMMENT 'Max earning cap',
     daily_roi DECIMAL(8,2) NOT NULL DEFAULT 0,
     validity_days INT NOT NULL DEFAULT 30,
     description TEXT NULL,

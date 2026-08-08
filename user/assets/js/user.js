@@ -471,6 +471,13 @@ document.addEventListener('DOMContentLoaded', () => {
         syncHiddenName(countrySel, countryName);
         syncHiddenName(stateSel, stateName);
         syncHiddenName(citySel, cityName);
+
+        // If country already selected (e.g. India default) but state list empty, load via AJAX
+        if (countrySel.value && stateSel.options.length <= 1) {
+            countrySel.dispatchEvent(new Event('change'));
+        } else if (stateSel.value && citySel && citySel.options.length <= 1) {
+            stateSel.dispatchEvent(new Event('change'));
+        }
     }
 
     const lightbox = document.getElementById('aadharLightbox');

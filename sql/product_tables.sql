@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS products (
     size_id INT NULL,
     color_id INT NULL,
     price DECIMAL(12,2) NOT NULL DEFAULT 0,
+    bv DECIMAL(12,2) NOT NULL DEFAULT 0,
     mrp DECIMAL(12,2) DEFAULT 0,
     stock_qty INT NOT NULL DEFAULT 0,
     description TEXT NULL,

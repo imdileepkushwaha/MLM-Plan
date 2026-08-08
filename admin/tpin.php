@@ -2,8 +2,25 @@
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/tpin.php';
 
-$pageTitle = 'T-Pin';
+$pageTitle = 'Add T-Pin';
 tpin_ensure_tables($pdo);
+
+// AJAX: Member name by Member ID only
+if (isset($_GET['ajax']) && $_GET['ajax'] === 'member') {
+    header('Content-Type: application/json; charset=utf-8');
+    $code = trim((string) ($_GET['member_id'] ?? ''));
+    $member = $code !== '' ? tpin_find_member_by_code($pdo, $code) : null;
+    if (!$member || ($member['status'] ?? '') === 'blocked') {
+        echo json_encode(['ok' => false, 'name' => '']);
+        exit;
+    }
+    echo json_encode([
+        'ok' => true,
+        'name' => (string) $member['full_name'],
+        'member_id' => (string) $member['member_id'],
+    ]);
+    exit;
+}
 
 $adminId = (int) ($_SESSION['admin_id'] ?? 0);
 $errors = [];
@@ -37,47 +54,35 @@ if (isset($_GET['block'])) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action = (string) ($_POST['action'] ?? 'generate');
+    $packageId = (int) ($_POST['package_id'] ?? 0);
+    $qty = (int) ($_POST['qty'] ?? 0);
+    $assignCode = trim((string) ($_POST['assign_member'] ?? ''));
+    $assignId = null;
 
-    if ($action === 'assign') {
-        $pinId = (int) ($_POST['pin_id'] ?? 0);
-        $toLogin = trim((string) ($_POST['assign_to'] ?? ''));
-        $member = tpin_find_member($pdo, $toLogin);
+    if ($assignCode !== '') {
+        $member = tpin_find_member_by_code($pdo, $assignCode);
         if (!$member) {
-            $errors[] = 'Member not found for assign.';
+            $errors[] = 'Member ID not found.';
+        } elseif (($member['status'] ?? '') === 'blocked') {
+            $errors[] = 'Member is blocked.';
         } else {
-            $res = tpin_assign($pdo, $pinId, (int) $member['id']);
-            if ($res['ok']) {
-                flash('success', 'T-Pin assigned to ' . $member['member_id'] . '.');
-                header('Location: tpin.php' . tpin_admin_filter_qs());
-                exit;
-            }
-            $errors[] = $res['error'] ?? 'Assign failed.';
+            $assignId = (int) $member['id'];
         }
-    } else {
-        $packageId = (int) ($_POST['package_id'] ?? 0);
-        $qty = (int) ($_POST['qty'] ?? 0);
-        $assignLogin = trim((string) ($_POST['assign_member'] ?? ''));
-        $note = trim((string) ($_POST['note'] ?? ''));
-        $assignId = null;
-        if ($assignLogin !== '') {
-            $member = tpin_find_member($pdo, $assignLogin);
-            if (!$member) {
-                $errors[] = 'Assign-to member not found.';
-            } else {
-                $assignId = (int) $member['id'];
+    }
+
+    if (!$errors) {
+        $res = tpin_generate($pdo, $packageId, $qty, $assignId, $adminId ?: null, '');
+        if ($res['ok']) {
+            $msg = $res['created'] . ' T-Pin(s) generated. Batch: ' . $res['batch'];
+            if ($assignId) {
+                $msg .= ' · Assigned to ' . $assignCode;
             }
-        }
-        if (!$errors) {
-            $res = tpin_generate($pdo, $packageId, $qty, $assignId, $adminId ?: null, $note);
-            if ($res['ok']) {
-                flash('success', $res['created'] . ' T-Pin(s) generated. Batch: ' . $res['batch']);
-                $lastBatch = $res['batch'];
-                $lastPins = $res['pins'];
-                log_activity('tpin_generate', 'Generated ' . $res['created'] . ' pins batch ' . $res['batch']);
-            } else {
-                $errors[] = $res['error'] ?? 'Generate failed.';
-            }
+            flash('success', $msg);
+            $lastBatch = $res['batch'];
+            $lastPins = $res['pins'];
+            log_activity('tpin_generate', 'Generated ' . $res['created'] . ' pins batch ' . $res['batch'] . ($assignId ? ' for ' . $assignCode : ''));
+        } else {
+            $errors[] = $res['error'] ?? 'Generate failed.';
         }
     }
 }
@@ -125,6 +130,10 @@ $stmt->execute($params);
 $rows = $stmt->fetchAll();
 
 $packages = $pdo->query("SELECT id, name, amount FROM packages WHERE status = 'active' ORDER BY amount ASC")->fetchAll();
+$pkgMap = [];
+foreach ($packages as $p) {
+    $pkgMap[(int) $p['id']] = (float) $p['amount'];
+}
 
 $counts = ['unused' => 0, 'used' => 0, 'blocked' => 0];
 try {
@@ -136,6 +145,22 @@ try {
 }
 $totalPins = $counts['unused'] + $counts['used'] + $counts['blocked'];
 $hasFilter = $q !== '' || $status !== '' || $pkgFilter > 0;
+
+$postPkgId = (int) ($_POST['package_id'] ?? 0);
+$postQty = (int) ($_POST['qty'] ?? 10);
+if ($postQty < 1) {
+    $postQty = 10;
+}
+$postAmt = $postPkgId && isset($pkgMap[$postPkgId]) ? $pkgMap[$postPkgId] : 0.0;
+$postTotal = $postAmt * $postQty;
+$postAssign = trim((string) ($_POST['assign_member'] ?? ''));
+$postMemberName = '';
+if ($postAssign !== '') {
+    $pm = tpin_find_member_by_code($pdo, $postAssign);
+    if ($pm && ($pm['status'] ?? '') !== 'blocked') {
+        $postMemberName = (string) $pm['full_name'];
+    }
+}
 
 require_once __DIR__ . '/../includes/header.php';
 $flash = get_flash();
@@ -175,32 +200,39 @@ $flash = get_flash();
             <div class="alert alert-error"><?= e(implode(' ', $errors)) ?></div>
         <?php endif; ?>
 
-        <form method="post" class="tpin-gen-form">
-            <input type="hidden" name="action" value="generate">
+        <form method="post" class="tpin-gen-form" id="tpinGenForm">
             <div class="tpin-gen-grid">
                 <div class="form-group">
                     <label for="package_id">Package *</label>
                     <select name="package_id" id="package_id" required>
-                        <option value="">Select package</option>
+                        <option value="" data-amount="0">Select package</option>
                         <?php foreach ($packages as $p): ?>
-                            <option value="<?= (int) $p['id'] ?>" <?= (int) ($_POST['package_id'] ?? 0) === (int) $p['id'] ? 'selected' : '' ?>>
-                                <?= e($p['name']) ?> — <?= currency((float) $p['amount']) ?>
+                            <option value="<?= (int) $p['id'] ?>" data-amount="<?= e(number_format((float) $p['amount'], 2, '.', '')) ?>" <?= $postPkgId === (int) $p['id'] ? 'selected' : '' ?>>
+                                <?= e($p['name']) ?>
                             </option>
                         <?php endforeach; ?>
                     </select>
                 </div>
                 <div class="form-group">
+                    <label for="package_amount">Package amount</label>
+                    <input type="text" id="package_amount" value="<?= $postAmt > 0 ? e(number_format($postAmt, 2)) : '' ?>" readonly tabindex="-1" placeholder="Select package" class="tpin-readonly">
+                </div>
+                <div class="form-group">
                     <label for="qty">Quantity *</label>
-                    <input type="number" name="qty" id="qty" min="1" max="500" value="<?= e((string) ($_POST['qty'] ?? '10')) ?>" required>
+                    <input type="number" name="qty" id="qty" min="1" max="500" value="<?= e((string) $postQty) ?>" required>
                 </div>
                 <div class="form-group">
-                    <label for="assign_member">Assign to member <em>(optional)</em></label>
-                    <input type="text" name="assign_member" id="assign_member" value="<?= e($_POST['assign_member'] ?? '') ?>" placeholder="Member ID / username / email">
-                    <span class="tpin-hint">Blank = company stock. Assign later from the list, or let members transfer.</span>
+                    <label for="total_amount">Total amount</label>
+                    <input type="text" id="total_amount" value="<?= $postTotal > 0 ? e(number_format($postTotal, 2)) : '' ?>" readonly tabindex="-1" placeholder="Package × Qty" class="tpin-readonly">
                 </div>
                 <div class="form-group">
-                    <label for="note">Batch note</label>
-                    <input type="text" name="note" id="note" value="<?= e($_POST['note'] ?? '') ?>" maxlength="255" placeholder="e.g. March promo batch">
+                    <label for="assign_member">Member ID <em>(optional)</em></label>
+                    <input type="text" name="assign_member" id="assign_member" value="<?= e($postAssign) ?>" placeholder="Member ID only" autocomplete="off">
+                    <span class="tpin-hint">Blank = company stock. Fill Member ID to generate directly for that member.</span>
+                </div>
+                <div class="form-group">
+                    <label for="member_name">Member name</label>
+                    <input type="text" id="member_name" value="<?= e($postMemberName) ?>" readonly tabindex="-1" placeholder="Auto-filled when Member ID matches" class="tpin-readonly">
                 </div>
             </div>
             <div class="tpin-gen-actions">
@@ -276,7 +308,7 @@ $flash = get_flash();
             <strong><?= $hasFilter ? 'No matching T-Pins' : 'No T-Pins yet' ?></strong>
             <p><?= $hasFilter
                 ? 'Nothing matches your search or filters. Try clearing them.'
-                : 'Generate your first batch above. Pins can stay in company stock or be assigned to a member.' ?></p>
+                : 'Generate your first batch above. Pins stay in company stock until transferred from Transfer T-Pin.' ?></p>
             <?php if ($hasFilter): ?>
                 <a href="tpin.php" class="btn btn-primary btn-sm">Clear filters</a>
             <?php endif; ?>
@@ -327,21 +359,8 @@ $flash = get_flash();
                     </td>
                     <td><span class="tpin-batch-code"><?= e($r['batch_code'] ?? '—') ?></span></td>
                     <td>
-                        <?php if ($st === 'unused' && empty($r['assigned_to'])): ?>
-                            <div class="tpin-row-actions">
-                                <form method="post" class="tpin-assign-form">
-                                    <input type="hidden" name="action" value="assign">
-                                    <input type="hidden" name="pin_id" value="<?= (int) $r['id'] ?>">
-                                    <input type="text" name="assign_to" class="tpin-assign-input" placeholder="Member ID" required autocomplete="off">
-                                    <button type="submit" class="btn btn-primary btn-sm">Assign</button>
-                                </form>
-                                <a href="tpin.php<?= tpin_admin_filter_qs(['block' => (string) (int) $r['id']]) ?>" class="btn btn-outline btn-sm tpin-block-btn" data-confirm="Block this unused T-Pin?">Block</a>
-                            </div>
-                        <?php elseif ($st === 'unused'): ?>
-                            <div class="tpin-row-actions">
-                                <span class="tpin-assigned-lock">Assigned — transfer only by member</span>
-                                <a href="tpin.php<?= tpin_admin_filter_qs(['block' => (string) (int) $r['id']]) ?>" class="btn btn-outline btn-sm tpin-block-btn" data-confirm="Block this unused T-Pin?">Block</a>
-                            </div>
+                        <?php if ($st === 'unused'): ?>
+                            <a href="tpin.php<?= tpin_admin_filter_qs(['block' => (string) (int) $r['id']]) ?>" class="btn btn-outline btn-sm tpin-block-btn" data-confirm="Block this unused T-Pin?">Block</a>
                         <?php else: ?>
                             <span class="tpin-dash">—</span>
                         <?php endif; ?>
@@ -354,20 +373,83 @@ $flash = get_flash();
     <?php endif; ?>
 </div>
 
+<style>
+.tpin-readonly {
+    background: #f1f5f9 !important;
+    color: #0f172a !important;
+    cursor: default !important;
+}
+.tpin-readonly:focus {
+    box-shadow: none !important;
+    border-color: #e2e8f0 !important;
+}
+</style>
+
 <script>
 (function () {
+    const pkg = document.getElementById('package_id');
+    const qty = document.getElementById('qty');
+    const amtEl = document.getElementById('package_amount');
+    const totalEl = document.getElementById('total_amount');
+    const assignEl = document.getElementById('assign_member');
+    const nameEl = document.getElementById('member_name');
+    let lookupTimer = null;
+
+    function fmt(n) {
+        if (!isFinite(n) || n <= 0) return '';
+        return n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function syncAmounts() {
+        const opt = pkg && pkg.options[pkg.selectedIndex];
+        const price = opt ? parseFloat(opt.getAttribute('data-amount') || '0') : 0;
+        const q = Math.max(0, parseInt(qty && qty.value ? qty.value : '0', 10) || 0);
+        if (amtEl) amtEl.value = price > 0 ? fmt(price) : '';
+        if (totalEl) totalEl.value = price > 0 && q > 0 ? fmt(price * q) : '';
+    }
+
+    function lookupMember() {
+        const code = (assignEl && assignEl.value ? assignEl.value : '').trim();
+        if (!code) {
+            if (nameEl) nameEl.value = '';
+            return;
+        }
+        fetch('tpin.php?ajax=member&member_id=' + encodeURIComponent(code), {
+            headers: { 'Accept': 'application/json' }
+        })
+            .then((r) => r.json())
+            .then((data) => {
+                if (nameEl) nameEl.value = (data && data.ok) ? (data.name || '') : '';
+            })
+            .catch(() => {
+                if (nameEl) nameEl.value = '';
+            });
+    }
+
+    if (pkg) pkg.addEventListener('change', syncAmounts);
+    if (qty) {
+        qty.addEventListener('input', syncAmounts);
+        qty.addEventListener('change', syncAmounts);
+    }
+    if (assignEl) {
+        assignEl.addEventListener('input', () => {
+            clearTimeout(lookupTimer);
+            lookupTimer = setTimeout(lookupMember, 280);
+        });
+        assignEl.addEventListener('blur', lookupMember);
+    }
+    syncAmounts();
+
     function copyText(text, el) {
         if (!text) return;
         navigator.clipboard.writeText(text).then(() => {
             if (!el) return;
             el.classList.add('is-copied');
-            const prev = el.textContent;
-            if (el.matches('.tpin-chip, .tpin-code-btn, #tpinCopyAll')) {
-                const label = el.id === 'tpinCopyAll' ? 'Copied' : prev;
-                if (el.id === 'tpinCopyAll') el.textContent = 'Copied';
+            if (el.id === 'tpinCopyAll') {
+                el.textContent = 'Copied';
                 setTimeout(() => {
                     el.classList.remove('is-copied');
-                    if (el.id === 'tpinCopyAll') el.textContent = 'Copy all';
+                    el.textContent = 'Copy all';
                 }, 1100);
             } else {
                 setTimeout(() => el.classList.remove('is-copied'), 900);

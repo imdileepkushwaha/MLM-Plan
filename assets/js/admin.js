@@ -24,9 +24,45 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     document.querySelectorAll('[data-nav-toggle]').forEach((btn) => {
+        const group = btn.closest('[data-nav-group]');
+        if (!group) return;
+        const sub = group.querySelector('.nav-submenu');
+        if (!sub) return;
+
+        const setHeight = (px) => {
+            sub.style.height = typeof px === 'number' ? `${px}px` : px;
+        };
+
+        // Sync initial state without flash
+        if (group.classList.contains('open')) {
+            setHeight('auto');
+            sub.style.opacity = '1';
+        } else {
+            setHeight(0);
+        }
+
         btn.addEventListener('click', () => {
-            const group = btn.closest('[data-nav-group]');
-            if (group) group.classList.toggle('open');
+            const willOpen = !group.classList.contains('open');
+
+            if (willOpen) {
+                group.classList.add('open');
+                btn.setAttribute('aria-expanded', 'true');
+                setHeight(0);
+                void sub.offsetHeight;
+                setHeight(sub.scrollHeight);
+                const onEnd = (e) => {
+                    if (e.propertyName !== 'height') return;
+                    sub.removeEventListener('transitionend', onEnd);
+                    if (group.classList.contains('open')) setHeight('auto');
+                };
+                sub.addEventListener('transitionend', onEnd);
+            } else {
+                setHeight(sub.scrollHeight);
+                void sub.offsetHeight;
+                group.classList.remove('open');
+                btn.setAttribute('aria-expanded', 'false');
+                setHeight(0);
+            }
         });
     });
 
@@ -170,7 +206,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="tt-name">${escHtml(data.name || data.user || '')}</div>
                 <div class="tt-id">${escHtml(data.id || '')} · @${escHtml(data.user || '')}</div>
                 ${data.alert ? `<div class="tt-alert">${escHtml(data.alert)}</div>` : ''}
-                <div class="tt-row"><span>Status</span><span>${escHtml(data.status || '')}</span></div>
+                <div class="tt-row"><span>Status</span><span class="badge badge-${escHtml(String(data.status || '').toLowerCase().replace(/[\s-]+/g, '_'))}">${escHtml(data.status || '—')}</span></div>
                 <div class="tt-row"><span>Package</span><span>${escHtml(data.package || '—')}</span></div>
                 <div class="tt-row"><span>Email</span><span>${escHtml(data.email || '—')}</span></div>
                 <div class="tt-row"><span>Phone</span><span>${escHtml(data.phone || '—')}</span></div>
@@ -375,9 +411,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const pfForm = document.getElementById('pfForm');
     if (pfForm) {
         let step = 1;
-        const total = 6;
         const navItems = Array.from(document.querySelectorAll('[data-pf-step]'));
         const panels = Array.from(document.querySelectorAll('.pf-step'));
+        const total = Math.max(navItems.length, panels.length, 1);
         const prevBtn = document.getElementById('pfPrev');
         const nextBtn = document.getElementById('pfNext');
         const submitBtn = document.getElementById('pfSubmit');
@@ -698,5 +734,42 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
     }
+
+    // Auto-submit filter forms: dropdown/date on change, text inputs debounced
+    document.querySelectorAll('form.filters, form.members-filter-form, form.tpin-filters').forEach((form) => {
+        const method = (form.getAttribute('method') || 'get').toLowerCase();
+        if (method === 'post') return;
+
+        let timer = null;
+        const submitNow = () => {
+            if (typeof form.requestSubmit === 'function') {
+                form.requestSubmit();
+            } else {
+                form.submit();
+            }
+        };
+
+        form.querySelectorAll('select, input[type="date"], input[type="month"], input[type="week"]').forEach((el) => {
+            el.addEventListener('change', () => {
+                clearTimeout(timer);
+                submitNow();
+            });
+        });
+
+        form.querySelectorAll('input[type="text"], input[type="search"], input[type="number"], input:not([type])').forEach((el) => {
+            if (el.name === 'admin_note' || el.classList.contains('act-note-input')) return;
+            el.addEventListener('input', () => {
+                clearTimeout(timer);
+                timer = setTimeout(submitNow, 450);
+            });
+            el.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    clearTimeout(timer);
+                    submitNow();
+                }
+            });
+        });
+    });
 
 });

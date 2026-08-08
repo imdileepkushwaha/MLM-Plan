@@ -4,26 +4,42 @@ require_once __DIR__ . '/../includes/kyc.php';
 $pageTitle = 'Approve KYC';
 
 ensure_kyc_documents_table($pdo);
+ensure_kyc_upi_table($pdo);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $docId = (int) ($_POST['doc_id'] ?? 0);
     $action = $_POST['action'] ?? '';
     $note = trim((string) ($_POST['kyc_note'] ?? ''));
+    $source = $_POST['source'] ?? 'doc';
 
     if ($docId > 0 && in_array($action, ['approve', 'reject'], true)) {
         $status = $action === 'approve' ? 'approved' : 'rejected';
-        $stmt = $pdo->prepare('SELECT * FROM member_kyc_documents WHERE id = ? LIMIT 1');
-        $stmt->execute([$docId]);
-        $doc = $stmt->fetch();
-        if ($doc) {
-            $pdo->prepare('UPDATE member_kyc_documents SET status = ?, admin_note = ?, reviewed_at = NOW() WHERE id = ?')
-                ->execute([$status, $note !== '' ? $note : null, $docId]);
-            kyc_sync_member_status($pdo, (int) $doc['member_id']);
-            $typeLabel = kyc_doc_types()[$doc['doc_type']]['label'] ?? $doc['doc_type'];
-            log_activity('kyc_' . $action, "KYC $status ($typeLabel) doc #$docId member #{$doc['member_id']}");
-            flash('success', $typeLabel . ' ' . $status . ' successfully.');
+
+        if ($source === 'upi') {
+            $row = kyc_upi_get($pdo, $docId);
+            if ($row) {
+                $pdo->prepare('UPDATE member_kyc_upi SET status = ?, admin_note = ?, reviewed_at = NOW() WHERE id = ?')
+                    ->execute([$status, $note !== '' ? $note : null, $docId]);
+                kyc_upi_sync_parent($pdo, (int) $row['member_id']);
+                log_activity('kyc_' . $action, "KYC $status (UPI) upi #{$docId} member #{$row['member_id']}");
+                flash('success', 'UPI Details ' . $status . ' successfully.');
+            } else {
+                flash('error', 'UPI entry not found.');
+            }
         } else {
-            flash('error', 'KYC document not found.');
+            $stmt = $pdo->prepare('SELECT * FROM member_kyc_documents WHERE id = ? LIMIT 1');
+            $stmt->execute([$docId]);
+            $doc = $stmt->fetch();
+            if ($doc && ($doc['doc_type'] ?? '') !== 'upi') {
+                $pdo->prepare('UPDATE member_kyc_documents SET status = ?, admin_note = ?, reviewed_at = NOW() WHERE id = ?')
+                    ->execute([$status, $note !== '' ? $note : null, $docId]);
+                kyc_sync_member_status($pdo, (int) $doc['member_id']);
+                $typeLabel = kyc_doc_types()[$doc['doc_type']]['label'] ?? $doc['doc_type'];
+                log_activity('kyc_' . $action, "KYC $status ($typeLabel) doc #$docId member #{$doc['member_id']}");
+                flash('success', $typeLabel . ' ' . $status . ' successfully.');
+            } else {
+                flash('error', 'KYC document not found.');
+            }
         }
     } else {
         flash('error', 'Invalid KYC action.');
@@ -37,133 +53,157 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $q = trim($_GET['q'] ?? '');
 $statusFilter = $_GET['status'] ?? 'pending';
+if (!in_array($statusFilter, ['pending', 'approved', 'rejected', 'not_submitted'], true)) {
+    $statusFilter = 'pending';
+}
 $typeFilter = $_GET['type'] ?? 'all';
 $page = max(1, (int) ($_GET['page'] ?? 1));
 $perPage = 12;
 $offset = ($page - 1) * $perPage;
 
-$where = ['1=1'];
-$params = [];
-
-if ($q !== '') {
-    $where[] = '(m.member_id LIKE ? OR m.username LIKE ? OR m.full_name LIKE ? OR m.email LIKE ? OR m.phone LIKE ?
-        OR d.pan_number LIKE ? OR d.account_number LIKE ? OR d.aadhar_number LIKE ? OR d.ifsc_code LIKE ?)';
-    $like = '%' . $q . '%';
-    $params = array_merge($params, [$like, $like, $like, $like, $like, $like, $like, $like, $like]);
-}
-
-if (in_array($statusFilter, ['pending', 'approved', 'rejected', 'not_submitted'], true)) {
-    $where[] = 'd.status = ?';
-    $params[] = $statusFilter;
-}
-
-if (in_array($typeFilter, ['pan', 'bank', 'aadhar'], true)) {
-    $where[] = 'd.doc_type = ?';
-    $params[] = $typeFilter;
-}
-
-$whereSql = implode(' AND ', $where);
-
-$countStmt = $pdo->prepare("
-    SELECT COUNT(*)
-    FROM member_kyc_documents d
-    JOIN members m ON m.id = d.member_id
-    WHERE $whereSql
-");
-$countStmt->execute($params);
-$total = (int) $countStmt->fetchColumn();
-$totalPages = max(1, (int) ceil($total / $perPage));
-
-$stmt = $pdo->prepare("
-    SELECT d.*,
-           m.member_id AS member_code,
-           m.username, m.full_name, m.email, m.phone, m.status AS member_status
-    FROM member_kyc_documents d
-    JOIN members m ON m.id = d.member_id
-    WHERE $whereSql
-    ORDER BY
-        CASE d.status WHEN 'pending' THEN 0 WHEN 'rejected' THEN 1 WHEN 'approved' THEN 2 ELSE 3 END,
-        d.submitted_at DESC,
-        d.id DESC
-    LIMIT $perPage OFFSET $offset
-");
-$stmt->execute($params);
-$rows = $stmt->fetchAll();
-
-$statPending = (int) $pdo->query("SELECT COUNT(*) FROM member_kyc_documents WHERE status = 'pending'")->fetchColumn();
-$statApproved = (int) $pdo->query("SELECT COUNT(*) FROM member_kyc_documents WHERE status = 'approved'")->fetchColumn();
-$statRejected = (int) $pdo->query("SELECT COUNT(*) FROM member_kyc_documents WHERE status = 'rejected'")->fetchColumn();
-$statNotSubmitted = (int) $pdo->query("SELECT COUNT(*) FROM member_kyc_documents WHERE status = 'not_submitted'")->fetchColumn();
-
 $types = kyc_doc_types();
 
+/**
+ * Build UNION query parts for KYC docs + UPI rows.
+ * @return array{0: string[], 1: array}
+ */
+function kyc_admin_union_parts(PDO $pdo, string $statusFilter, string $typeFilter, string $q): array
+{
+    $docWhere = ["d.doc_type != 'upi'"];
+    $docParams = [];
+    $upiWhere = ['1=1'];
+    $upiParams = [];
+
+    if ($q !== '') {
+        $like = '%' . $q . '%';
+        $docWhere[] = '(m.member_id LIKE ? OR m.username LIKE ? OR m.full_name LIKE ? OR m.email LIKE ? OR m.phone LIKE ?
+            OR d.pan_number LIKE ? OR d.account_number LIKE ? OR d.aadhar_number LIKE ? OR d.ifsc_code LIKE ?)';
+        $docParams = array_merge($docParams, [$like, $like, $like, $like, $like, $like, $like, $like, $like]);
+
+        $upiWhere[] = '(m.member_id LIKE ? OR m.username LIKE ? OR m.full_name LIKE ? OR m.email LIKE ? OR m.phone LIKE ?
+            OR u.upi_id LIKE ? OR u.upi_name LIKE ?)';
+        $upiParams = array_merge($upiParams, [$like, $like, $like, $like, $like, $like, $like]);
+    }
+
+    if (in_array($statusFilter, ['pending', 'approved', 'rejected', 'not_submitted'], true)) {
+        $docWhere[] = 'd.status = ?';
+        $docParams[] = $statusFilter;
+        if ($statusFilter === 'not_submitted') {
+            $upiWhere[] = '0=1';
+        } else {
+            $upiWhere[] = 'u.status = ?';
+            $upiParams[] = $statusFilter;
+        }
+    }
+
+    $includeDocs = in_array($typeFilter, ['all', 'pan', 'bank', 'aadhar'], true);
+    $includeUpi = in_array($typeFilter, ['all', 'upi'], true);
+
+    if (in_array($typeFilter, ['pan', 'bank', 'aadhar'], true)) {
+        $docWhere[] = 'd.doc_type = ?';
+        $docParams[] = $typeFilter;
+    }
+
+    $docWhereSql = implode(' AND ', $docWhere);
+    $upiWhereSql = implode(' AND ', $upiWhere);
+
+    $unionParts = [];
+    $unionParams = [];
+
+    if ($includeDocs) {
+        $unionParts[] = "
+            SELECT d.id, d.member_id, d.doc_type, d.status, d.submitted_at, d.reviewed_at, d.admin_note,
+                   d.document_file, d.document_back,
+                   d.pan_number, d.pan_name, d.account_holder, d.account_number, d.ifsc_code,
+                   d.bank_name, d.branch_name, d.aadhar_number, d.address_line,
+                   d.country, d.state, d.city, d.area, d.pincode,
+                   d.upi_id, d.upi_name, 'doc' AS source,
+                   m.member_id AS member_code, m.username, m.full_name, m.email, m.phone
+            FROM member_kyc_documents d
+            JOIN members m ON m.id = d.member_id
+            WHERE $docWhereSql
+        ";
+        $unionParams = array_merge($unionParams, $docParams);
+    }
+
+    if ($includeUpi) {
+        $unionParts[] = "
+            SELECT u.id, u.member_id, 'upi' AS doc_type, u.status, u.submitted_at, u.reviewed_at, u.admin_note,
+                   u.document_file, NULL AS document_back,
+                   NULL AS pan_number, NULL AS pan_name, NULL AS account_holder, NULL AS account_number, NULL AS ifsc_code,
+                   NULL AS bank_name, NULL AS branch_name, NULL AS aadhar_number, NULL AS address_line,
+                   NULL AS country, NULL AS state, NULL AS city, NULL AS area, NULL AS pincode,
+                   u.upi_id, u.upi_name, 'upi' AS source,
+                   m.member_id AS member_code, m.username, m.full_name, m.email, m.phone
+            FROM member_kyc_upi u
+            JOIN members m ON m.id = u.member_id
+            WHERE $upiWhereSql
+        ";
+        $unionParams = array_merge($unionParams, $upiParams);
+    }
+
+    return [$unionParts, $unionParams];
+}
+
+function kyc_admin_fetch_rows(PDO $pdo, string $statusFilter, string $typeFilter, string $q, int $limit = 0, int $offset = 0): array
+{
+    [$unionParts, $unionParams] = kyc_admin_union_parts($pdo, $statusFilter, $typeFilter, $q);
+    if (!$unionParts) {
+        return [];
+    }
+    $unionSql = implode(' UNION ALL ', $unionParts);
+    $sql = "
+        SELECT * FROM ($unionSql) AS kyc_union
+        ORDER BY
+            CASE status WHEN 'pending' THEN 0 WHEN 'rejected' THEN 1 WHEN 'approved' THEN 2 ELSE 3 END,
+            submitted_at DESC,
+            id DESC
+    ";
+    if ($limit > 0) {
+        $sql .= ' LIMIT ' . (int) $limit . ' OFFSET ' . (int) $offset;
+    }
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($unionParams);
+    return $stmt->fetchAll() ?: [];
+}
+
+function kyc_admin_count_rows(PDO $pdo, string $statusFilter, string $typeFilter, string $q): int
+{
+    [$unionParts, $unionParams] = kyc_admin_union_parts($pdo, $statusFilter, $typeFilter, $q);
+    if (!$unionParts) {
+        return 0;
+    }
+    $unionSql = implode(' UNION ALL ', $unionParts);
+    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM ($unionSql) AS kyc_union");
+    $countStmt->execute($unionParams);
+    return (int) $countStmt->fetchColumn();
+}
+
+$statPending = kyc_admin_count_rows($pdo, 'pending', $typeFilter, $q);
+$statApproved = kyc_admin_count_rows($pdo, 'approved', $typeFilter, $q);
+$statRejected = kyc_admin_count_rows($pdo, 'rejected', $typeFilter, $q);
+$statNotSubmitted = kyc_admin_count_rows($pdo, 'not_submitted', $typeFilter, $q);
+
+$total = kyc_admin_count_rows($pdo, $statusFilter, $typeFilter, $q);
+$totalPages = max(1, (int) ceil($total / $perPage));
+if ($page > $totalPages) {
+    $page = $totalPages;
+    $offset = ($page - 1) * $perPage;
+}
+$rows = kyc_admin_fetch_rows($pdo, $statusFilter, $typeFilter, $q, $perPage, $offset);
+
+$statusTabs = [
+    'pending' => ['label' => 'Pending', 'count' => $statPending],
+    'approved' => ['label' => 'Approved', 'count' => $statApproved],
+    'rejected' => ['label' => 'Rejected', 'count' => $statRejected],
+    'not_submitted' => ['label' => 'Not Submitted', 'count' => $statNotSubmitted],
+];
+
 require_once __DIR__ . '/../includes/header.php';
-?>
 
-<div class="members-stats">
-    <a href="approve-kyc.php?status=pending&type=<?= e($typeFilter) ?>" class="m-stat <?= $statusFilter === 'pending' ? 'is-on' : '' ?>">
-        <span class="m-stat-ico orange">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        </span>
-        <div>
-            <strong><?= $statPending ?></strong>
-            <span>Pending</span>
-        </div>
-    </a>
-    <a href="approve-kyc.php?status=approved&type=<?= e($typeFilter) ?>" class="m-stat <?= $statusFilter === 'approved' ? 'is-on' : '' ?>">
-        <span class="m-stat-ico green">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-        </span>
-        <div>
-            <strong><?= $statApproved ?></strong>
-            <span>Approved</span>
-        </div>
-    </a>
-    <a href="approve-kyc.php?status=rejected&type=<?= e($typeFilter) ?>" class="m-stat <?= $statusFilter === 'rejected' ? 'is-on' : '' ?>">
-        <span class="m-stat-ico red">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-        </span>
-        <div>
-            <strong><?= $statRejected ?></strong>
-            <span>Rejected</span>
-        </div>
-    </a>
-    <a href="approve-kyc.php?status=not_submitted&type=<?= e($typeFilter) ?>" class="m-stat <?= $statusFilter === 'not_submitted' ? 'is-on' : '' ?>">
-        <span class="m-stat-ico blue"><?= icon_svg('view') ?></span>
-        <div>
-            <strong><?= $statNotSubmitted ?></strong>
-            <span>Not Submitted</span>
-        </div>
-    </a>
-</div>
-
-<div class="panel members-panel">
-    <div class="panel-header members-toolbar">
-        <div>
-            <h2>Approve KYC</h2>
-            <p class="members-sub">Review PAN, Bank and Aadhaar documents submitted by members</p>
-        </div>
-    </div>
-    <div class="panel-body members-filters">
-        <form class="members-filter-form" method="get">
-            <input type="hidden" name="status" value="<?= e($statusFilter) ?>">
-            <div class="form-group">
-                <label>Document</label>
-                <select name="type">
-                    <option value="all" <?= $typeFilter === 'all' ? 'selected' : '' ?>>All types</option>
-                    <?php foreach ($types as $key => $info): ?>
-                        <option value="<?= e($key) ?>" <?= $typeFilter === $key ? 'selected' : '' ?>><?= e($info['label']) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Search</label>
-                <input type="text" name="q" value="<?= e($q) ?>" placeholder="Member ID, name, PAN, Aadhaar, account…">
-            </div>
-            <button type="submit" class="btn btn-primary">Search</button>
-            <a href="approve-kyc.php" class="btn btn-outline">Reset</a>
-        </form>
-    </div>
+/** Render one KYC rows table. */
+$renderKycTable = static function (array $rows, array $types, string $backStatus, string $typeFilter) {
+    ?>
     <div class="table-wrap">
         <table class="data members-table">
             <thead>
@@ -182,13 +222,14 @@ require_once __DIR__ . '/../includes/header.php';
                     <td colspan="6">
                         <div class="empty-state">
                             <strong>No KYC documents</strong>
-                            <span>No records match this filter.</span>
+                            <span>No records in this list.</span>
                         </div>
                     </td>
                 </tr>
             <?php else: foreach ($rows as $r):
                 $typeKey = $r['doc_type'];
                 $typeLabel = $types[$typeKey]['label'] ?? $typeKey;
+                $source = $r['source'] ?? 'doc';
                 $fileUrl = kyc_doc_admin_url($r['document_file'] ?? null);
                 $fileBackUrl = kyc_doc_admin_url($r['document_back'] ?? null);
                 ?>
@@ -223,6 +264,9 @@ require_once __DIR__ . '/../includes/header.php';
                                 <?php if (!empty($r['branch_name'])): ?>
                                     <span><?= e($r['branch_name']) ?></span>
                                 <?php endif; ?>
+                            <?php elseif ($typeKey === 'upi'): ?>
+                                <strong><?= e($r['upi_name'] ?: 'UPI') ?></strong>
+                                <span><?= e($r['upi_id'] ?: '—') ?></span>
                             <?php else: ?>
                                 <strong><?= e($r['aadhar_number'] ?: '—') ?></strong>
                                 <span><?= e($r['address_line'] ?: '—') ?></span>
@@ -243,7 +287,8 @@ require_once __DIR__ . '/../includes/header.php';
                         <?php if ($r['status'] === 'pending'): ?>
                         <form method="post" class="kyc-actions">
                             <input type="hidden" name="doc_id" value="<?= (int) $r['id'] ?>">
-                            <input type="hidden" name="back_status" value="<?= e($statusFilter) ?>">
+                            <input type="hidden" name="source" value="<?= e($source) ?>">
+                            <input type="hidden" name="back_status" value="<?= e($backStatus) ?>">
                             <input type="hidden" name="back_type" value="<?= e($typeFilter) ?>">
                             <input type="text" name="kyc_note" placeholder="Note (optional)" class="kyc-note-input">
                             <div class="action-icons">
@@ -263,6 +308,55 @@ require_once __DIR__ . '/../includes/header.php';
             </tbody>
         </table>
     </div>
+    <?php
+};
+?>
+
+<div class="panel members-panel">
+    <div class="panel-header members-toolbar">
+        <div>
+            <h2>Approve KYC</h2>
+            <p class="members-sub">Review PAN, Bank, Aadhaar and UPI documents submitted by members</p>
+        </div>
+    </div>
+
+    <div class="kyc-tabs" role="tablist" aria-label="KYC status">
+        <?php foreach ($statusTabs as $key => $tab):
+            $href = 'approve-kyc.php?status=' . urlencode($key) . '&type=' . urlencode($typeFilter) . '&q=' . urlencode($q);
+            ?>
+            <a href="<?= e($href) ?>"
+               class="kyc-tab<?= $statusFilter === $key ? ' is-active' : '' ?>"
+               role="tab"
+               aria-selected="<?= $statusFilter === $key ? 'true' : 'false' ?>">
+                <span class="kyc-tab-label"><?= e($tab['label']) ?></span>
+                <span class="kyc-tab-count"><?= (int) $tab['count'] ?></span>
+            </a>
+        <?php endforeach; ?>
+    </div>
+
+    <div class="panel-body members-filters">
+        <form class="members-filter-form" method="get">
+            <input type="hidden" name="status" value="<?= e($statusFilter) ?>">
+            <div class="form-group">
+                <label>Document</label>
+                <select name="type">
+                    <option value="all" <?= $typeFilter === 'all' ? 'selected' : '' ?>>All types</option>
+                    <?php foreach ($types as $key => $info): ?>
+                        <option value="<?= e($key) ?>" <?= $typeFilter === $key ? 'selected' : '' ?>><?= e($info['label']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Search</label>
+                <input type="text" name="q" value="<?= e($q) ?>" placeholder="Member ID, name, PAN, Aadhaar, UPI…">
+            </div>
+            <button type="submit" class="btn btn-primary">Filter</button>
+            <a href="approve-kyc.php?status=<?= e($statusFilter) ?>" class="btn btn-outline">Reset</a>
+        </form>
+    </div>
+
+    <?php $renderKycTable($rows, $types, $statusFilter, $typeFilter); ?>
+
     <?php if ($totalPages > 1): ?>
     <div class="pagination members-pagination">
         <?php for ($i = 1; $i <= $totalPages; $i++): ?>
@@ -271,5 +365,74 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
     <?php endif; ?>
 </div>
+
+<style>
+.kyc-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    padding: 0.75rem 1.15rem 0;
+    border-bottom: 1px solid rgba(131, 146, 171, 0.18);
+    background: #f8f9fa;
+}
+.kyc-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.7rem 1rem;
+    border-radius: 0.65rem 0.65rem 0 0;
+    text-decoration: none;
+    color: #67748e;
+    font-weight: 600;
+    font-size: 0.9rem;
+    border: 1px solid transparent;
+    border-bottom: 0;
+    margin-bottom: -1px;
+    transition: color .15s ease, background .15s ease, border-color .15s ease;
+}
+.kyc-tab:hover {
+    color: #344767;
+    background: rgba(255,255,255,0.7);
+}
+.kyc-tab.is-active {
+    color: #344767;
+    background: #fff;
+    border-color: rgba(131, 146, 171, 0.18);
+    box-shadow: 0 -1px 0 #fff;
+}
+.kyc-tab-count {
+    min-width: 1.5rem;
+    height: 1.35rem;
+    padding: 0 0.45rem;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    background: rgba(131, 146, 171, 0.16);
+    color: #67748e;
+}
+.kyc-tab.is-active .kyc-tab-count {
+    background: rgba(94, 114, 228, 0.15);
+    color: #5e72e4;
+}
+.kyc-tab[href*="status=pending"].is-active .kyc-tab-count {
+    background: rgba(245, 158, 11, 0.18);
+    color: #d97706;
+}
+.kyc-tab[href*="status=approved"].is-active .kyc-tab-count {
+    background: rgba(23, 173, 55, 0.15);
+    color: #17ad37;
+}
+.kyc-tab[href*="status=rejected"].is-active .kyc-tab-count {
+    background: rgba(234, 6, 6, 0.12);
+    color: #ea0606;
+}
+@media (max-width: 640px) {
+    .kyc-tabs { gap: 0.2rem; padding: 0.55rem 0.65rem 0; }
+    .kyc-tab { padding: 0.6rem 0.7rem; font-size: 0.82rem; }
+}
+</style>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>

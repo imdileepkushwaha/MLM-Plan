@@ -1,7 +1,10 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../includes/geo.php';
 require_admin();
 header('Content-Type: application/json');
+
+ensure_india_geo_seed($pdo);
 
 $type = $_GET['type'] ?? '';
 

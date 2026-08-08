@@ -1,6 +1,8 @@
 <?php
 require_once __DIR__ . '/../includes/activation.php';
 require_once __DIR__ . '/../includes/tpin.php';
+require_once __DIR__ . '/../includes/package_products.php';
+require_once __DIR__ . '/../includes/wallet_topup.php';
 require_once __DIR__ . '/includes/auth.php';
 require_user();
 
@@ -46,9 +48,11 @@ $supportEmail = setting('support_email', setting('contact_email', ''));
 $supportPhone = setting('contact_phone', '');
 
 $payMode = (string) ($_POST['pay_mode'] ?? 'utr');
-if (!in_array($payMode, ['utr', 'tpin'], true)) {
+if (!in_array($payMode, ['utr', 'tpin', 'wallet'], true)) {
     $payMode = 'utr';
 }
+
+$topupBal = wallet_balance($pdo, (int) $user['id'], 'topup');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$pending) {
     $packageId = (int) ($_POST['package_id'] ?? 0);
@@ -70,6 +74,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$pending) {
             exit;
         }
         $errors[] = $result['error'] ?? 'T-Pin redemption failed.';
+    } elseif ($payMode === 'wallet') {
+        if ($packageId <= 0) {
+            $errors[] = $isUpgrade ? 'Please select a package to upgrade.' : 'Please select a package to activate.';
+        } else {
+            $result = wallet_topup_pay_and_activate($pdo, $user, $user, $packageId);
+            if ($result['ok']) {
+                $pkgName = (string) ($result['package']['name'] ?? 'package');
+                flash(
+                    'success',
+                    ($result['mode'] === 'upgrade')
+                        ? "Upgrade complete via Topup Wallet — you are now on {$pkgName}."
+                        : "Account activated via Topup Wallet — package {$pkgName} assigned."
+                );
+                header('Location: index.php');
+                exit;
+            }
+            $errors[] = $result['error'] ?? 'Topup Wallet payment failed.';
+        }
     } else {
         $method = trim((string) ($_POST['payment_method'] ?? 'Bank Transfer'));
         $utr = trim((string) ($_POST['utr_reference'] ?? ''));
@@ -147,6 +169,19 @@ $selectedBvDelta = $selectedPkg
 $featuredId = $packages ? (int) ($packages[0]['id'] ?? 0) : 0;
 $stepPay = !$pending && $packages;
 $maxPkgAvailable = $isUpgrade && !$packages && !$pending;
+
+$pkgProductCounts = [];
+try {
+    $pkgProductCounts = package_products_counts($pdo, array_map(static fn ($p) => (int) $p['id'], $packages));
+} catch (Throwable $e) {
+    $pkgProductCounts = [];
+}
+$selectedProductCount = $selectedPkg
+    ? (int) (($pkgProductCounts[(int) $selectedPkg['id']]['product_count'] ?? 0))
+    : 0;
+$selectedProductQty = $selectedPkg
+    ? (int) (($pkgProductCounts[(int) $selectedPkg['id']]['total_qty'] ?? 0))
+    : 0;
 ?>
 <div class="up-page-head">
     <div>
@@ -284,13 +319,21 @@ $maxPkgAvailable = $isUpgrade && !$packages && !$pending;
             $bvShow = $isUpgrade ? activation_diff_bv($currentPkg, $pkg) : (float) $pkg['bv'];
             $pricePlain = html_entity_decode(strip_tags(currency($payAmt)), ENT_QUOTES, 'UTF-8');
             $fullPlain = html_entity_decode(strip_tags(currency((float) $pkg['amount'])), ENT_QUOTES, 'UTF-8');
+            $prodMeta = $pkgProductCounts[$pid] ?? ['product_count' => 0, 'total_qty' => 0];
+            $prodCount = (int) $prodMeta['product_count'];
+            $prodQty = (int) $prodMeta['total_qty'];
+            $prodLabel = $prodCount === 1 ? '1 product' : $prodCount . ' products';
+            if ($prodQty > $prodCount && $prodCount > 0) {
+                $prodLabel .= ' · ' . $prodQty . ' pcs';
+            }
             ?>
             <label class="actx-card <?= e($tone) ?><?= $isOn ? ' is-on' : '' ?><?= $isFeatured ? ' is-featured' : '' ?>" data-actx-card
                    data-name="<?= e($pkg['name']) ?>"
                    data-price="<?= e($pricePlain) ?>"
                    data-full="<?= e($fullPlain) ?>"
                    data-bv="<?= e(number_format($bvShow, 0)) ?>"
-                   data-days="<?= (int) $pkg['validity_days'] ?>">
+                   data-products="<?= (int) $prodCount ?>"
+                   data-products-label="<?= e($prodCount > 0 ? $prodLabel : 'No products') ?>">
                 <input type="radio" name="package_id" value="<?= $pid ?>" <?= $isOn ? 'checked' : '' ?> required>
                 <?php if ($isFeatured): ?>
                     <span class="actx-badge"><?= $isUpgrade ? 'Next step' : 'Popular' ?></span>
@@ -308,7 +351,10 @@ $maxPkgAvailable = $isUpgrade && !$packages && !$pending;
                 <?php endif; ?>
                 <span class="actx-stats">
                     <span><small><?= $isUpgrade ? '+BV' : 'BV' ?></small><strong><?= number_format($bvShow, 0) ?></strong></span>
-                    <span><small>Validity</small><strong><?= (int) $pkg['validity_days'] ?>d</strong></span>
+                    <span title="<?= e($prodCount > 0 ? $prodLabel : 'No products assigned') ?>">
+                        <small>Products</small>
+                        <strong><?= $prodCount > 0 ? (int) $prodCount : '—' ?></strong>
+                    </span>
                 </span>
                 <?php if (!$isUpgrade && !empty($pkg['description'])): ?>
                     <span class="actx-desc"><?= e($pkg['description']) ?></span>
@@ -329,7 +375,7 @@ $maxPkgAvailable = $isUpgrade && !$packages && !$pending;
                 <div>
                     <span class="actx-pay-kicker">Step 2 · Payment mode</span>
                     <h3>How do you want to <?= $isUpgrade ? 'upgrade' : 'activate' ?>?</h3>
-                    <p>T-Pin activates instantly. UTR/slip goes to admin for approval.</p>
+                    <p>T-Pin or Topup Wallet activates instantly. UTR/slip goes to admin for approval.</p>
                 </div>
             </div>
         </div>
@@ -344,11 +390,28 @@ $maxPkgAvailable = $isUpgrade && !$packages && !$pending;
                 </label>
                 <label class="actx-mode-tab" style="flex:1;min-width:160px;border:1.5px solid var(--up-border,#e5e7eb);border-radius:12px;padding:0.85rem 1rem;cursor:pointer;display:grid;gap:0.2rem">
                     <span style="display:flex;align-items:center;gap:0.5rem">
+                        <input type="radio" name="pay_mode" value="wallet" <?= $payMode === 'wallet' ? 'checked' : '' ?> data-actx-mode>
+                        <strong>Topup Wallet</strong>
+                    </span>
+                    <small style="opacity:.7">Balance <?= strip_tags(currency($topupBal)) ?> · instant</small>
+                </label>
+                <label class="actx-mode-tab" style="flex:1;min-width:160px;border:1.5px solid var(--up-border,#e5e7eb);border-radius:12px;padding:0.85rem 1rem;cursor:pointer;display:grid;gap:0.2rem">
+                    <span style="display:flex;align-items:center;gap:0.5rem">
                         <input type="radio" name="pay_mode" value="utr" <?= $payMode === 'utr' ? 'checked' : '' ?> data-actx-mode>
                         <strong>UTR / Slip</strong>
                     </span>
                     <small style="opacity:.7">Bank / UPI transfer · admin approval</small>
                 </label>
+            </div>
+
+            <div id="actxWalletPanel" <?= $payMode === 'wallet' ? '' : 'hidden' ?>>
+                <div class="up-alert up-alert-info" style="margin-bottom:0.85rem">
+                    Payable amount will be deducted from your <strong>Topup Wallet</strong> instantly.
+                    Current balance: <strong><?= currency($topupBal) ?></strong>
+                    <?php if ($topupBal + 0.00001 < $selectedPay): ?>
+                        — <a href="wallet-topup.php">Add Money</a> first (need <?= currency($selectedPay) ?>).
+                    <?php endif; ?>
+                </div>
             </div>
 
             <div id="actxTpinPanel" <?= $payMode === 'tpin' ? '' : 'hidden' ?>>
@@ -574,7 +637,16 @@ $maxPkgAvailable = $isUpgrade && !$packages && !$pending;
                 <span>·</span>
                 <span><?= $isUpgrade ? '+BV' : 'BV' ?> <em id="actxSumBv"><?= $selectedPkg ? number_format($selectedBvDelta, 0) : '0' ?></em></span>
                 <span>·</span>
-                <span><em id="actxSumDays"><?= $selectedPkg ? (int) $selectedPkg['validity_days'] : 0 ?></em> days</span>
+                <span id="actxSumProducts"><?php
+                    if ($selectedProductCount > 0) {
+                        echo e($selectedProductCount === 1 ? '1 product' : $selectedProductCount . ' products');
+                        if ($selectedProductQty > $selectedProductCount) {
+                            echo e(' · ' . $selectedProductQty . ' pcs');
+                        }
+                    } else {
+                        echo 'No products';
+                    }
+                ?></span>
             </div>
         </div>
         <button type="submit" class="actx-submit" id="actxSubmitBtn">
@@ -591,7 +663,7 @@ $maxPkgAvailable = $isUpgrade && !$packages && !$pending;
     const nameEl = document.getElementById('actxSumName');
     const priceEl = document.getElementById('actxSumPrice');
     const bvEl = document.getElementById('actxSumBv');
-    const daysEl = document.getElementById('actxSumDays');
+    const productsEl = document.getElementById('actxSumProducts');
 
     function sync(card) {
         cards.forEach((c) => {
@@ -603,7 +675,7 @@ $maxPkgAvailable = $isUpgrade && !$packages && !$pending;
         if (nameEl) nameEl.textContent = card.getAttribute('data-name') || '—';
         if (priceEl) priceEl.textContent = card.getAttribute('data-price') || '—';
         if (bvEl) bvEl.textContent = card.getAttribute('data-bv') || '0';
-        if (daysEl) daysEl.textContent = card.getAttribute('data-days') || '0';
+        if (productsEl) productsEl.textContent = card.getAttribute('data-products-label') || 'No products';
     }
 
     cards.forEach((card) => {
@@ -806,6 +878,7 @@ $maxPkgAvailable = $isUpgrade && !$packages && !$pending;
 
     const modeInputs = document.querySelectorAll('[data-actx-mode]');
     const tpinPanel = document.getElementById('actxTpinPanel');
+    const walletPanel = document.getElementById('actxWalletPanel');
     const utrPanel = document.getElementById('actxUtrPanel');
     const tpinInput = document.getElementById('tpin_code');
     const tpinPick = document.getElementById('tpin_pick');
@@ -820,8 +893,11 @@ $maxPkgAvailable = $isUpgrade && !$packages && !$pending;
     function syncPayMode() {
         const mode = currentMode();
         const isTpin = mode === 'tpin';
+        const isWallet = mode === 'wallet';
+        const isUtr = mode === 'utr';
         if (tpinPanel) tpinPanel.hidden = !isTpin;
-        if (utrPanel) utrPanel.hidden = isTpin;
+        if (walletPanel) walletPanel.hidden = !isWallet;
+        if (utrPanel) utrPanel.hidden = !isUtr;
         if (tpinInput) {
             if (isTpin) {
                 tpinInput.setAttribute('required', 'required');
@@ -831,9 +907,9 @@ $maxPkgAvailable = $isUpgrade && !$packages && !$pending;
                 tpinInput.disabled = true;
             }
         }
-        if (methodSel) methodSel.disabled = isTpin;
+        if (methodSel) methodSel.disabled = !isUtr;
         if (utrInput) {
-            if (isTpin) {
+            if (!isUtr) {
                 utrInput.removeAttribute('required');
                 utrInput.disabled = true;
             } else {
@@ -841,7 +917,7 @@ $maxPkgAvailable = $isUpgrade && !$packages && !$pending;
             }
         }
         if (slipInput) {
-            if (isTpin) {
+            if (!isUtr) {
                 slipInput.removeAttribute('required');
                 slipInput.disabled = true;
             } else {
@@ -851,11 +927,13 @@ $maxPkgAvailable = $isUpgrade && !$packages && !$pending;
         if (submitLabel) {
             if (isTpin) {
                 submitLabel.textContent = isUpgradeUi ? 'Activate Upgrade with T-Pin' : 'Activate with T-Pin';
+            } else if (isWallet) {
+                submitLabel.textContent = isUpgradeUi ? 'Upgrade with Topup Wallet' : 'Activate with Topup Wallet';
             } else {
                 submitLabel.textContent = isUpgradeUi ? 'Submit Upgrade' : 'Submit for Approval';
             }
         }
-        if (!isTpin && typeof syncPaymentProof === 'function') {
+        if (isUtr && typeof syncPaymentProof === 'function') {
             syncPaymentProof();
         }
     }

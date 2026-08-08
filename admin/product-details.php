@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/utility.php';
 $pageTitle = 'Product Details';
+products_ensure_columns($pdo);
 
 if (isset($_GET['toggle'])) {
     utility_toggle_status($pdo, 'products', (int) $_GET['toggle']);
@@ -68,13 +69,14 @@ require_once __DIR__ . '/../includes/header.php';
                     <th>Size</th>
                     <th>Color</th>
                     <th>Price</th>
+                    <th>BV</th>
                     <th>Stock</th>
                     <th>Status</th>
                     <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
-            <?php if (!$rows): ?><tr><td colspan="10">No products found.</td></tr>
+            <?php if (!$rows): ?><tr><td colspan="11">No products found.</td></tr>
             <?php else: foreach ($rows as $r): ?>
                 <tr>
                     <td><strong><?= e($r['name']) ?></strong></td>
@@ -84,6 +86,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <td><?= e($r['size_name'] ?? '—') ?></td>
                     <td><?= e($r['color_name'] ?? '—') ?></td>
                     <td><?= currency((float)$r['price']) ?></td>
+                    <td><?= number_format((float) ($r['bv'] ?? 0), 2) ?></td>
                     <td><?= (int)$r['stock_qty'] ?></td>
                     <td><?= status_badge($r['status']) ?></td>
                     <td>

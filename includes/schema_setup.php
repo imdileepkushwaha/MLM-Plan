@@ -62,8 +62,8 @@ function mlm_expected_tables(): array
         'product_categories', 'product_subcategories', 'product_sizes', 'product_colors',
         'subcategory_settings', 'products', 'product_images', 'product_vendors',
         'stock_purchases', 'stock_purchase_items', 'commodity_prices',
-        'password_resets', 'member_kyc_documents', 'activation_requests',
-        'bv_credits', 'closing_runs', 'closing_items',
+        'password_resets', 'member_kyc_documents', 'member_kyc_upi', 'activation_requests',
+        'bv_credits', 'closing_runs', 'closing_items', 'package_products',
     ];
 }
 

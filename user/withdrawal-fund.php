@@ -16,7 +16,7 @@ if (!$user || ($user['status'] ?? '') === 'blocked') {
 $uid = (int) $user['id'];
 $errors = [];
 $minAmt = wd_min_amount();
-$wallet = (float) $user['wallet_balance'];
+$wallet = (float) $user['wallet_balance']; // Income Wallet
 $pendingSum = wd_pending_sum($pdo, $uid);
 $available = wd_available_balance($pdo, $user);
 $prefills = wd_kyc_bank_prefills($pdo, $uid);
@@ -90,7 +90,7 @@ require_once __DIR__ . '/includes/header.php';
 <div class="up-page-head">
     <div>
         <h1>Withdrawal Fund</h1>
-        <p>Request a payout from your wallet balance.</p>
+        <p>Request a payout from your Income Wallet.</p>
     </div>
     <a href="withdrawal-report.php" class="up-btn up-btn-outline">View Report</a>
 </div>
@@ -99,7 +99,7 @@ require_once __DIR__ . '/includes/header.php';
     <article class="wd-stat g-green">
         <span class="wd-stat-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg></span>
         <div>
-            <span class="wd-stat-label">Wallet Balance</span>
+            <span class="wd-stat-label">Income Wallet</span>
             <strong><?= currency($wallet) ?></strong>
         </div>
     </article>
@@ -231,7 +231,7 @@ require_once __DIR__ . '/includes/header.php';
                         <div class="wd-break-row"><span>Processing fee (<?= e(rtrim(rtrim(number_format($feePct, 2, '.', ''), '0'), '.')) ?>%)</span><strong id="wdFee">—</strong></div>
                         <div class="wd-break-row"><span>Other deductions</span><strong id="wdOther">—</strong></div>
                         <div class="wd-break-row is-net"><span>You receive (net)</span><strong id="wdNet">—</strong></div>
-                        <p class="wd-form-note">Wallet deducts the <strong>gross</strong> amount on approval. Bank/UPI receives <strong>net</strong> after TDS &amp; fees.</p>
+                        <p class="wd-form-note">Income Wallet deducts the <strong>gross</strong> amount on approval. Bank/UPI receives <strong>net</strong> after TDS &amp; fees.</p>
                     </div>
                     <div class="wd-form-actions">
                         <a href="withdrawal-report.php" class="up-btn up-btn-outline">Cancel</a>
@@ -275,7 +275,7 @@ require_once __DIR__ . '/includes/header.php';
                     <span class="wd-tl-num" aria-hidden="true">3</span>
                     <div>
                         <strong>Admin approves</strong>
-                        <p>Wallet is deducted on approval</p>
+                        <p>Income Wallet is deducted on approval</p>
                     </div>
                 </li>
                 <li>

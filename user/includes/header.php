@@ -28,19 +28,25 @@ $isDash = ($currentPage === 'index');
 $isActivate = ($currentPage === 'activate');
 $isTpin = ($currentPage === 'tpin');
 $isSupport = ($currentPage === 'support');
-$profilePages = ['profile', 'edit-profile', 'change-password', 'upload-photo'];
+$profilePages = ['profile', 'edit-profile', 'change-password', 'upload-photo', 'id-card', 'welcome-letter'];
 $profileOpen = in_array($currentPage, $profilePages, true);
 $profileBadge = count($profilePages);
-$kycPages = ['kyc-pan', 'kyc-bank', 'kyc-aadhar'];
+$kycPages = ['kyc-pan', 'kyc-bank', 'kyc-aadhar', 'kyc-upi'];
 $kycOpen = in_array($currentPage, $kycPages, true);
-$kycBadge = kyc_incomplete_count($pdo, (int) $user['id']);
+$kycIncomplete = kyc_incomplete_count($pdo, (int) $user['id']);
+$kycBadge = $kycIncomplete > 0 ? $kycIncomplete : count($kycPages);
+$kycBadgeAlert = $kycIncomplete > 0;
 $teamPages = ['my-direct', 'my-downline', 'my-treeview', 'level-tree'];
 $teamOpen = in_array($currentPage, $teamPages, true);
 $teamBadge = count($teamPages);
 $wdPages = ['withdrawal-fund', 'withdrawal-report'];
 $wdOpen = in_array($currentPage, $wdPages, true);
-$wdBadge = count($wdPages);
 $wdPendingBadge = wd_pending_count($pdo, (int) $user['id']);
+$wdBadge = $wdPendingBadge > 0 ? $wdPendingBadge : count($wdPages);
+$wdBadgeAlert = $wdPendingBadge > 0;
+$walletPages = ['wallet', 'wallet-income', 'wallet-topup', 'wallet-shopping', 'wallet-transfer', 'wallet-topup-activate'];
+$walletOpen = in_array($currentPage, $walletPages, true);
+$walletBadge = 5;
 $incomePages = ['income-summary', 'income-binary', 'income-referral', 'income-matching', 'income-level', 'income-other'];
 $incomeOpen = in_array($currentPage, $incomePages, true);
 $incomeBadge = count($incomePages);
@@ -115,6 +121,7 @@ $icoKyc = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-wid
 $icoTeam = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>';
 $icoIncome = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3"/><path d="M9 13c6.667 0 6.667-10 0-10"/></svg>';
 $icoWd = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><circle cx="16" cy="15" r="1.5" fill="currentColor" stroke="none"/></svg>';
+$icoWallet = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/><path d="M16 7V5a2 2 0 00-2-2H6"/><circle cx="16" cy="14" r="1.5" fill="currentColor" stroke="none"/></svg>';
 $icoReports = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>';
 $icoActivate = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>';
 $icoTpin = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 9h4M7 13h10M15 9h2"/></svg>';
@@ -128,10 +135,10 @@ $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e($pageTitle) ?> | User Panel</title>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/css/user.css?v=<?= (int) @filemtime(__DIR__ . '/../assets/css/user.css') ?>">
 </head>
-<body class="up-body">
+<body class="up-body<?= !empty($bodyClass) ? ' ' . e($bodyClass) : '' ?>">
 <div class="up-app">
     <aside class="up-sidebar" id="upSidebar">
         <div class="up-brand">
@@ -177,6 +184,8 @@ $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="
                             <a href="profile.php" class="up-nav-sublink<?= $currentPage === 'profile' ? ' is-active' : '' ?>">View Profile</a>
                             <a href="edit-profile.php" class="up-nav-sublink<?= $currentPage === 'edit-profile' ? ' is-active' : '' ?>">Edit Profile</a>
                             <a href="upload-photo.php" class="up-nav-sublink<?= $currentPage === 'upload-photo' ? ' is-active' : '' ?>">Upload Photo</a>
+                            <a href="id-card.php" class="up-nav-sublink<?= $currentPage === 'id-card' ? ' is-active' : '' ?>">ID Card</a>
+                            <a href="welcome-letter.php" class="up-nav-sublink<?= $currentPage === 'welcome-letter' ? ' is-active' : '' ?>">Welcome Letter</a>
                             <a href="change-password.php" class="up-nav-sublink<?= $currentPage === 'change-password' ? ' is-active' : '' ?>">Change Password</a>
                         </div>
                     </div>
@@ -186,9 +195,7 @@ $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="
                     <button type="button" class="up-nav-item up-nav-toggle<?= $kycOpen ? ' is-active' : '' ?>" data-up-nav-toggle aria-expanded="<?= $kycOpen ? 'true' : 'false' ?>">
                         <span class="up-nav-ico"><?= $icoKyc ?></span>
                         <span class="up-nav-text">KYC</span>
-                        <?php if ($kycBadge > 0): ?>
-                            <span class="up-nav-badge"><?= (int) $kycBadge ?></span>
-                        <?php endif; ?>
+                        <span class="up-nav-badge<?= $kycBadgeAlert ? ' is-alert' : '' ?>" title="<?= $kycBadgeAlert ? 'Incomplete KYC documents' : 'KYC documents' ?>"><?= (int) $kycBadge ?></span>
                         <?= $chevron ?>
                     </button>
                     <div class="up-nav-sub" id="upNavSubKyc">
@@ -196,6 +203,7 @@ $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="
                             <a href="kyc-pan.php" class="up-nav-sublink<?= $currentPage === 'kyc-pan' ? ' is-active' : '' ?>">Pan Card</a>
                             <a href="kyc-bank.php" class="up-nav-sublink<?= $currentPage === 'kyc-bank' ? ' is-active' : '' ?>">Bank Detail</a>
                             <a href="kyc-aadhar.php" class="up-nav-sublink<?= $currentPage === 'kyc-aadhar' ? ' is-active' : '' ?>">Address Proof/Aadhar</a>
+                            <a href="kyc-upi.php" class="up-nav-sublink<?= $currentPage === 'kyc-upi' ? ' is-active' : '' ?>">UPI Details</a>
                         </div>
                     </div>
                 </div>
@@ -239,12 +247,34 @@ $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="
             </div>
 
             <div class="up-nav-section">
+                <div class="up-nav-label">Wallets</div>
+                <div class="up-nav-group<?= $walletOpen ? ' is-open' : '' ?>" data-up-nav-group>
+                    <button type="button" class="up-nav-item up-nav-toggle<?= $walletOpen ? ' is-active' : '' ?>" data-up-nav-toggle aria-expanded="<?= $walletOpen ? 'true' : 'false' ?>">
+                        <span class="up-nav-ico"><?= $icoWallet ?></span>
+                        <span class="up-nav-text">My Wallets</span>
+                        <span class="up-nav-badge"><?= (int) $walletBadge ?></span>
+                        <?= $chevron ?>
+                    </button>
+                    <div class="up-nav-sub" id="upNavSubWallet">
+                        <div class="up-nav-sub-inner">
+                            <a href="wallet.php" class="up-nav-sublink<?= $currentPage === 'wallet' ? ' is-active' : '' ?>">Overview</a>
+                            <a href="wallet-income.php" class="up-nav-sublink<?= $currentPage === 'wallet-income' ? ' is-active' : '' ?>">Income Wallet</a>
+                            <a href="wallet-topup.php" class="up-nav-sublink<?= $currentPage === 'wallet-topup' ? ' is-active' : '' ?>">Topup Wallet</a>
+                            <a href="wallet-topup-activate.php" class="up-nav-sublink<?= $currentPage === 'wallet-topup-activate' ? ' is-active' : '' ?>">Activate Member</a>
+                            <a href="wallet-shopping.php" class="up-nav-sublink<?= $currentPage === 'wallet-shopping' ? ' is-active' : '' ?>">Shopping Wallet</a>
+                            <a href="wallet-transfer.php" class="up-nav-sublink<?= $currentPage === 'wallet-transfer' ? ' is-active' : '' ?>">Transfer</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="up-nav-section">
                 <div class="up-nav-label">Withdrawal</div>
                 <div class="up-nav-group<?= $wdOpen ? ' is-open' : '' ?>" data-up-nav-group>
                     <button type="button" class="up-nav-item up-nav-toggle<?= $wdOpen ? ' is-active' : '' ?>" data-up-nav-toggle aria-expanded="<?= $wdOpen ? 'true' : 'false' ?>">
                         <span class="up-nav-ico"><?= $icoWd ?></span>
                         <span class="up-nav-text">Withdrawal</span>
-                        <span class="up-nav-badge"><?= (int) ($wdPendingBadge > 0 ? $wdPendingBadge : $wdBadge) ?></span>
+                        <span class="up-nav-badge<?= $wdBadgeAlert ? ' is-alert' : '' ?>" title="<?= $wdBadgeAlert ? 'Pending withdrawal requests' : 'Withdrawal menu' ?>"><?= (int) $wdBadge ?></span>
                         <?= $chevron ?>
                     </button>
                     <div class="up-nav-sub" id="upNavSubWithdrawal">
@@ -299,9 +329,21 @@ $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="
                     <a href="index.php" data-search="dashboard home">Dashboard</a>
                     <a href="profile.php" data-search="profile account">My Profile</a>
                     <a href="edit-profile.php" data-search="edit profile">Edit Profile</a>
+                    <a href="id-card.php" data-search="id card identity membership">ID Card</a>
+                    <a href="welcome-letter.php" data-search="welcome letter certificate seller">Welcome Letter</a>
                     <a href="my-treeview.php" data-search="team tree binary">My Treeview</a>
                     <a href="my-direct.php" data-search="direct team">My Direct</a>
                     <a href="income-summary.php" data-search="income earnings">Income Summary</a>
+                    <a href="wallet.php" data-search="wallet income topup shopping">My Wallets</a>
+                    <a href="wallet-income.php" data-search="income wallet">Income Wallet</a>
+                    <a href="wallet-topup.php" data-search="topup wallet add money">Topup Wallet</a>
+                    <a href="wallet-topup-activate.php" data-search="activate member topup">Activate with Topup</a>
+                    <a href="wallet-shopping.php" data-search="shopping wallet">Shopping Wallet</a>
+                    <a href="wallet-transfer.php" data-search="wallet transfer fund">Wallet Transfer</a>
+                    <a href="kyc-pan.php" data-search="kyc pan card">Pan Card KYC</a>
+                    <a href="kyc-bank.php" data-search="kyc bank detail account">Bank Detail KYC</a>
+                    <a href="kyc-aadhar.php" data-search="kyc aadhar address proof">Aadhaar KYC</a>
+                    <a href="kyc-upi.php" data-search="kyc upi id payment">UPI Details KYC</a>
                     <a href="withdrawal-fund.php" data-search="withdraw payout">Withdrawal Fund</a>
                     <a href="withdrawal-report.php" data-search="withdraw report">Withdrawal Report</a>
                     <a href="transaction-report.php" data-search="transaction report">Transaction Report</a>
@@ -369,6 +411,14 @@ $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="
                         <a href="upload-photo.php" class="up-user-item" role="menuitem">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
                             Upload Photo
+                        </a>
+                        <a href="id-card.php" class="up-user-item" role="menuitem">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="8" cy="12" r="2.2"/><path d="M14 10h5M14 14h3"/></svg>
+                            ID Card
+                        </a>
+                        <a href="welcome-letter.php" class="up-user-item" role="menuitem">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+                            Welcome Letter
                         </a>
                         <a href="change-password.php" class="up-user-item" role="menuitem">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>

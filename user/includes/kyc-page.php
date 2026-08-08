@@ -1,7 +1,7 @@
 <?php
 /**
  * Shared KYC page processor + render helpers.
- * Expects $kycType to be set before include (pan|bank|aadhar).
+ * Expects $kycType to be set before include (pan|bank|aadhar|upi).
  */
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/../../includes/kyc.php';
@@ -37,7 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    $fileRequired = empty($doc['document_file']);
+    $fileRequired = $kycType !== 'upi' && empty($doc['document_file']);
 
     if ($kycType === 'pan') {
         $panNumber = strtoupper(preg_replace('/\s+/', '', trim($_POST['pan_number'] ?? '')));
@@ -62,6 +62,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'Enter a valid IFSC code.';
         }
         if ($bankName === '') $errors[] = 'Bank name is required.';
+    } elseif ($kycType === 'upi') {
+        $upiName = trim($_POST['upi_name'] ?? '');
+        $upiId = strtolower(preg_replace('/\s+/', '', trim($_POST['upi_id'] ?? '')));
+        if ($upiName === '' || !in_array($upiName, kyc_upi_apps(), true)) {
+            $errors[] = 'Please select your UPI app (GPay, Paytm, PhonePe, etc.).';
+        }
+        if ($upiId === '' || !preg_match('/^[a-z0-9.\-_]{2,256}@[a-z]{2,64}$/i', $upiId)) {
+            $errors[] = 'Enter a valid UPI ID (e.g. name@oksbi or 9876543210@paytm).';
+        }
     } else {
         $aadharNumber = preg_replace('/\s+/', '', trim($_POST['aadhar_number'] ?? ''));
         $addressLine = trim($_POST['address_line'] ?? '');
@@ -106,6 +115,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $branchName !== '' ? $branchName : null,
                 $filePath, $memberId, $kycType,
             ]);
+        } elseif ($kycType === 'upi') {
+            $sql = 'UPDATE member_kyc_documents SET
+                upi_name = ?, upi_id = ?, document_file = ?,
+                status = \'pending\', admin_note = NULL, submitted_at = NOW(), reviewed_at = NULL
+                WHERE member_id = ? AND doc_type = ?';
+            $pdo->prepare($sql)->execute([$upiName, $upiId, $filePath, $memberId, $kycType]);
         } else {
             $sql = 'UPDATE member_kyc_documents SET
                 aadhar_number = ?, address_line = ?, document_file = ?,
@@ -183,6 +198,8 @@ require_once __DIR__ . '/header.php';
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M8 15h3"/></svg>
                         <?php elseif ($kycType === 'bank'): ?>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 10l9-7 9 7"/><path d="M5 10v8h14v-8"/><path d="M9 18v-4h6v4"/></svg>
+                        <?php elseif ($kycType === 'upi'): ?>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg>
                         <?php else: ?>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M3 16c1.5-2 3.5-3 6-3s4.5 1 6 3"/></svg>
                         <?php endif; ?>
@@ -257,6 +274,27 @@ require_once __DIR__ . '/header.php';
                                        value="<?= e($_POST['branch_name'] ?? ($doc['branch_name'] ?? '')) ?>"
                                        <?= $canEdit ? '' : 'disabled' ?>>
                             </div>
+                        <?php elseif ($kycType === 'upi'):
+                            $selectedUpiName = (string) ($_POST['upi_name'] ?? ($doc['upi_name'] ?? ''));
+                            ?>
+                            <div class="up-field">
+                                <label for="upi_name">UPI App / Name</label>
+                                <select id="upi_name" name="upi_name" <?= $canEdit ? 'required' : 'disabled' ?>>
+                                    <option value="">Select app</option>
+                                    <?php foreach (kyc_upi_apps() as $app): ?>
+                                        <option value="<?= e($app) ?>" <?= $selectedUpiName === $app ? 'selected' : '' ?>><?= e($app) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="up-field">
+                                <label for="upi_id">UPI ID</label>
+                                <input type="text" id="upi_id" name="upi_id" maxlength="100"
+                                       value="<?= e($_POST['upi_id'] ?? ($doc['upi_id'] ?? '')) ?>"
+                                       placeholder="yourname@upi" <?= $canEdit ? 'required' : 'disabled' ?>>
+                            </div>
+                            <div class="up-field full">
+                                <p class="kyc-hint">Select your app (Google Pay, PhonePe, Paytm, etc.) and enter the UPI ID linked to your bank account.</p>
+                            </div>
                         <?php else: ?>
                             <div class="up-field">
                                 <label for="aadhar_number">Aadhaar Number</label>
@@ -271,16 +309,18 @@ require_once __DIR__ . '/header.php';
                         <?php endif; ?>
 
                         <div class="up-field full">
-                            <label>Document File <?= empty($doc['document_file']) ? '' : '(optional to replace)' ?></label>
+                            <label><?= $kycType === 'upi' ? 'UPI QR / Screenshot (optional)' : 'Document File' ?><?= empty($doc['document_file']) ? '' : ' (optional to replace)' ?></label>
                             <?php
                             $dropTitle = match ($kycType) {
                                 'pan' => 'Drag & drop PAN card image here',
                                 'bank' => 'Drag & drop bank proof image here',
+                                'upi' => 'Drag & drop UPI QR screenshot here',
                                 default => 'Drag & drop Aadhaar / address proof here',
                             };
                             $dropHint = match ($kycType) {
                                 'pan' => 'JPG, PNG, WEBP · Clear photo of front side',
                                 'bank' => 'JPG, PNG, WEBP, PDF · Passbook / cancelled cheque',
+                                'upi' => 'JPG, PNG, WEBP, PDF · Optional QR / payment app screenshot',
                                 default => 'JPG, PNG, WEBP, PDF · Clear photo of front side',
                             };
                             $isPdfExisting = $docUrl && preg_match('/\.pdf$/i', (string) ($doc['document_file'] ?? ''));
@@ -288,7 +328,7 @@ require_once __DIR__ . '/header.php';
                             <?php if ($canEdit): ?>
                                 <div class="kyc-upload" id="kycUploadZone">
                                     <label class="kyc-drop<?= $docUrl ? ' has-file' : '' ?>" for="kycDocInput" id="kycDropzone">
-                                        <input type="file" id="kycDocInput" name="document" accept="image/jpeg,image/png,image/webp,application/pdf" <?= empty($doc['document_file']) ? 'required' : '' ?>>
+                                        <input type="file" id="kycDocInput" name="document" accept="image/jpeg,image/png,image/webp,application/pdf" <?= ($kycType !== 'upi' && empty($doc['document_file'])) ? 'required' : '' ?>>
 
                                         <div class="kyc-drop-preview" id="kycDropPreview"<?= $docUrl ? '' : ' hidden' ?>>
                                             <?php if ($docUrl && !$isPdfExisting): ?>

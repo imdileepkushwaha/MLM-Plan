@@ -1,8 +1,11 @@
 <?php
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../includes/geo.php';
 require_user();
 header('Content-Type: application/json');
+
+ensure_india_geo_seed($pdo);
 
 $type = $_GET['type'] ?? '';
 

@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/procedures.php';
 require_once __DIR__ . '/../includes/withdrawal.php';
+require_once __DIR__ . '/../includes/wallet.php';
 $pageTitle = 'Withdrawals';
 
 wd_ensure_columns($pdo);
@@ -89,15 +90,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $pdo->rollBack();
                         flash('error', 'Withdrawal is not pending.');
                     } else {
-                        $ded = $pdo->prepare('UPDATE members SET wallet_balance = wallet_balance - ? WHERE id = ? AND wallet_balance >= ?');
-                        $ded->execute([(float) $wd['amount'], (int) $wd['member_id'], (float) $wd['amount']]);
-                        if ($ded->rowCount() < 1) {
+                        $ded = wallet_debit(
+                            $pdo,
+                            (int) $wd['member_id'],
+                            'income',
+                            (float) $wd['amount'],
+                            'withdrawal',
+                            $id,
+                            'Withdrawal #' . $id . ' approved'
+                        );
+                        if (!$ded['ok']) {
                             $pdo->rollBack();
-                            flash('error', 'Insufficient wallet balance.');
+                            flash('error', $ded['error'] ?: 'Insufficient income wallet balance.');
                         } else {
                             $pdo->commit();
                             log_activity('withdrawal_approve', "Approved withdrawal #$id");
-                            flash('success', 'Withdrawal approved. Wallet deducted. Pay net ' . strip_tags(currency(wd_net_display($wd))) . '.');
+                            flash('success', 'Withdrawal approved. Income wallet deducted. Pay net ' . strip_tags(currency(wd_net_display($wd))) . '.');
                         }
                     }
                 } catch (Throwable $e) {
@@ -246,7 +254,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <td><strong class="rpt-amt"><?= currency(wd_net_display($r)) ?></strong></td>
                     <td><?= e($r['payment_method'] ?? '—') ?></td>
                     <td style="max-width:160px;font-size:0.8rem"><?= e($r['account_details'] ?? '—') ?></td>
-                    <td><span class="badge badge-<?= e($r['status']) ?>"><?= e($r['status']) ?></span></td>
+                    <td><?= status_badge((string) $r['status']) ?></td>
                     <td><?= date('d M Y H:i', strtotime($r['requested_at'])) ?></td>
                     <td>
                         <?php if ($r['status'] === 'pending'): ?>

@@ -10,6 +10,8 @@
  * 5) Admin charge % (optional) is deducted from binary before wallet credit.
  */
 
+require_once __DIR__ . '/wallet.php';
+
 function closing_ensure_tables(PDO $pdo): void
 {
     static $done = false;
@@ -234,7 +236,6 @@ function closing_pay_level_income(PDO $pdo, int $fromMemberId, string $memberCod
 
     $total = 0.0;
     $ins = $pdo->prepare('INSERT INTO commissions (member_id, from_member_id, type, amount, description, status) VALUES (?, ?, ?, ?, ?, ?)');
-    $wallet = $pdo->prepare('UPDATE members SET wallet_balance = wallet_balance + ?, total_earnings = total_earnings + ? WHERE id = ?');
     $load = $pdo->prepare("SELECT id, sponsor_id, status, package_id FROM members WHERE id = ? LIMIT 1");
 
     for ($level = 1; $level <= $levels && $sponsorId > 0; $level++) {
@@ -257,7 +258,8 @@ function closing_pay_level_income(PDO $pdo, int $fromMemberId, string $memberCod
                 $desc .= ' ' . $tag;
             }
             $ins->execute([(int) $up['id'], $fromMemberId, 'level', $comm, $desc, 'paid']);
-            $wallet->execute([$comm, $comm, (int) $up['id']]);
+            $cid = (int) $pdo->lastInsertId();
+            wallet_credit($pdo, (int) $up['id'], 'income', $comm, 'commission', $cid ?: null, $desc);
             $total += $comm;
         }
 
@@ -476,7 +478,6 @@ function closing_run_binary(PDO $pdo, ?int $adminId = null, bool $commit = true)
 
         $updBv = $pdo->prepare('UPDATE members SET left_bv = ?, right_bv = ? WHERE id = ?');
         $insComm = $pdo->prepare('INSERT INTO commissions (member_id, from_member_id, type, amount, description, status) VALUES (?, ?, ?, ?, ?, ?)');
-        $updWallet = $pdo->prepare('UPDATE members SET wallet_balance = wallet_balance + ?, total_earnings = total_earnings + ? WHERE id = ?');
         $sponsorStmt = $pdo->prepare("SELECT id, status, package_id FROM members WHERE id = ? LIMIT 1");
 
         foreach ($rows as $m) {
@@ -554,19 +555,34 @@ function closing_run_binary(PDO $pdo, ?int $adminId = null, bool $commit = true)
                     ),
                     'paid',
                 ]);
-                $updWallet->execute([$net, $net, $mid]);
+                $cid = (int) $pdo->lastInsertId();
+                wallet_credit(
+                    $pdo,
+                    $mid,
+                    'income',
+                    $net,
+                    'commission',
+                    $cid ?: null,
+                    sprintf(
+                        'Binary closing: %s pair(s), matched BV %s',
+                        rtrim(rtrim(number_format($match['pairs'], 2, '.', ''), '0'), '.'),
+                        number_format($match['matched_bv'], 2, '.', '')
+                    )
+                );
             }
 
             if ($matchingAmt > 0 && $matchingTo) {
+                $descM = 'Matching bonus on binary of ' . $m['member_id'];
                 $insComm->execute([
                     $matchingTo,
                     $mid,
                     'matching',
                     $matchingAmt,
-                    'Matching bonus on binary of ' . $m['member_id'],
+                    $descM,
                     'paid',
                 ]);
-                $updWallet->execute([$matchingAmt, $matchingAmt, $matchingTo]);
+                $cid = (int) $pdo->lastInsertId();
+                wallet_credit($pdo, $matchingTo, 'income', $matchingAmt, 'commission', $cid ?: null, $descM);
             }
         }
 

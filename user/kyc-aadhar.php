@@ -2,6 +2,7 @@
 $pageTitle = 'Address Proof / Aadhaar';
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/../includes/kyc.php';
+require_once __DIR__ . '/../includes/geo.php';
 require_user();
 
 $user = current_user($pdo);
@@ -20,6 +21,8 @@ $uploadDir = BASE_PATH . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR .
 
 $doc = kyc_get_doc($pdo, $memberId, $kycType);
 $canEdit = kyc_can_edit($doc);
+
+ensure_india_geo_seed($pdo);
 
 $countries = [];
 try {
@@ -45,6 +48,16 @@ if (!$form['country_id'] && $form['country'] !== '') {
     foreach ($countries as $c) {
         if (strcasecmp($c['name'], $form['country']) === 0) {
             $form['country_id'] = (int) $c['id'];
+            break;
+        }
+    }
+}
+// Default to India when nothing selected yet
+if (!$form['country_id']) {
+    foreach ($countries as $c) {
+        if (strcasecmp($c['name'], 'India') === 0) {
+            $form['country_id'] = (int) $c['id'];
+            $form['country'] = $c['name'];
             break;
         }
     }
