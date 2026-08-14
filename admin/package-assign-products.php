@@ -27,35 +27,43 @@ try {
     $errors[] = 'Products table not ready. Add products first from Product Management.';
 }
 
+$existingAssigned = $selectedPackageId > 0 ? package_products_list($pdo, $selectedPackageId) : [];
+$assignmentLocked = count($existingAssigned) > 0;
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $selectedPackageId = (int) ($_POST['package_id'] ?? 0);
-    $productIds = $_POST['product_id'] ?? [];
-    $qtys = $_POST['qty'] ?? [];
-    $prices = $_POST['unit_price'] ?? [];
-
-    if (!is_array($productIds)) {
-        $productIds = [];
-    }
-    if (!is_array($qtys)) {
-        $qtys = [];
-    }
-    if (!is_array($prices)) {
-        $prices = [];
-    }
-
-    $rows = [];
-    $n = max(count($productIds), count($qtys), count($prices));
-    for ($i = 0; $i < $n; $i++) {
-        $rows[] = [
-            'product_id' => (int) ($productIds[$i] ?? 0),
-            'qty' => (int) ($qtys[$i] ?? 0),
-            'unit_price' => (float) ($prices[$i] ?? 0),
-        ];
-    }
+    $existingAssigned = $selectedPackageId > 0 ? package_products_list($pdo, $selectedPackageId) : [];
+    $assignmentLocked = count($existingAssigned) > 0;
 
     if ($selectedPackageId <= 0) {
         $errors[] = 'Please select a package.';
+    } elseif ($assignmentLocked) {
+        $errors[] = 'Products are already assigned to this package. Assignment cannot be changed.';
     } else {
+        $productIds = $_POST['product_id'] ?? [];
+        $qtys = $_POST['qty'] ?? [];
+        $prices = $_POST['unit_price'] ?? [];
+
+        if (!is_array($productIds)) {
+            $productIds = [];
+        }
+        if (!is_array($qtys)) {
+            $qtys = [];
+        }
+        if (!is_array($prices)) {
+            $prices = [];
+        }
+
+        $rows = [];
+        $n = max(count($productIds), count($qtys), count($prices));
+        for ($i = 0; $i < $n; $i++) {
+            $rows[] = [
+                'product_id' => (int) ($productIds[$i] ?? 0),
+                'qty' => (int) ($qtys[$i] ?? 0),
+                'unit_price' => (float) ($prices[$i] ?? 0),
+            ];
+        }
+
         $res = package_products_save($pdo, $selectedPackageId, $rows);
         if ($res['ok']) {
             $msg = $res['count'] > 0
@@ -82,9 +90,9 @@ foreach ($packages as $pkg) {
     }
 }
 
-$assigned = $selectedPackageId > 0 ? package_products_list($pdo, $selectedPackageId) : [];
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errors) {
-    // Rebuild rows from POST for redisplay
+$assigned = $existingAssigned;
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errors && !$assignmentLocked) {
+    // Rebuild rows from POST for redisplay (only when still editable)
     $assigned = [];
     $productIds = $_POST['product_id'] ?? [];
     $qtys = $_POST['qty'] ?? [];
@@ -205,8 +213,18 @@ $flash = get_flash();
 
             <div class="pkg-assign-toolbar">
                 <strong>Products in package</strong>
-                <button type="button" class="btn btn-outline btn-sm" id="addProductRow">+ Add product</button>
+                <?php if (!$assignmentLocked): ?>
+                    <button type="button" class="btn btn-outline btn-sm" id="addProductRow">+ Add product</button>
+                <?php else: ?>
+                    <span class="pkg-assign-locked-badge">Assignment locked</span>
+                <?php endif; ?>
             </div>
+
+            <?php if ($assignmentLocked): ?>
+                <div class="pkg-assign-locked-note">
+                    Products are already assigned to this package. Add / remove and save are disabled.
+                </div>
+            <?php endif; ?>
 
             <div class="table-wrap pkg-assign-table-wrap">
                 <table class="data tpin-table" id="pkgProductTable">
@@ -216,13 +234,13 @@ $flash = get_flash();
                         <th>Price</th>
                         <th>Quantity</th>
                         <th>Line total</th>
-                        <th>Action</th>
+                        <?php if (!$assignmentLocked): ?><th>Action</th><?php endif; ?>
                     </tr>
                     </thead>
                     <tbody id="pkgProductBody">
                     <?php if (!$assigned): ?>
                         <tr class="pkg-empty-row">
-                            <td colspan="5" class="tpin-td-empty" style="text-align:center;padding:1.2rem;color:#64748b">
+                            <td colspan="<?= $assignmentLocked ? 4 : 5 ?>" class="tpin-td-empty" style="text-align:center;padding:1.2rem;color:#64748b">
                                 No products yet. Click “Add product”.
                             </td>
                         </tr>
@@ -232,6 +250,9 @@ $flash = get_flash();
                         ?>
                         <tr class="pkg-product-row">
                             <td>
+                                <?php if ($assignmentLocked): ?>
+                                    <input type="text" class="tpin-readonly" value="<?= e((string) ($row['product_name'] ?? '')) ?>" readonly tabindex="-1">
+                                <?php else: ?>
                                 <select name="product_id[]" class="pkg-product-select" required>
                                     <option value="">Select product</option>
                                     <?php foreach ($products as $p): ?>
@@ -240,20 +261,29 @@ $flash = get_flash();
                                         </option>
                                     <?php endforeach; ?>
                                 </select>
+                                <?php endif; ?>
                             </td>
                             <td>
                                 <input type="text" class="pkg-price-view tpin-readonly" value="<?= e(number_format((float) $row['unit_price'], 2)) ?>" readonly tabindex="-1">
+                                <?php if (!$assignmentLocked): ?>
                                 <input type="hidden" name="unit_price[]" class="pkg-unit-price" value="<?= e(number_format((float) $row['unit_price'], 2, '.', '')) ?>">
+                                <?php endif; ?>
                             </td>
                             <td>
+                                <?php if ($assignmentLocked): ?>
+                                    <input type="text" class="tpin-readonly" value="<?= (int) $row['qty'] ?>" readonly tabindex="-1">
+                                <?php else: ?>
                                 <input type="number" name="qty[]" class="pkg-qty" min="1" max="9999" value="<?= (int) $row['qty'] ?>" required>
+                                <?php endif; ?>
                             </td>
                             <td>
                                 <input type="text" class="pkg-line-total tpin-readonly" value="<?= e(number_format($line, 2)) ?>" readonly tabindex="-1">
                             </td>
+                            <?php if (!$assignmentLocked): ?>
                             <td>
                                 <button type="button" class="btn btn-outline btn-sm pkg-remove-row">Remove</button>
                             </td>
+                            <?php endif; ?>
                         </tr>
                         <?php endforeach; ?>
                     <?php endif; ?>
@@ -276,10 +306,12 @@ $flash = get_flash();
                 </div>
             </div>
 
+            <?php if (!$assignmentLocked): ?>
             <div class="tpin-gen-actions">
                 <button type="submit" class="btn btn-primary">Save assignment</button>
                 <a href="package-assign-products.php" class="btn btn-outline">Reset</a>
             </div>
+            <?php endif; ?>
         </form>
     </div>
 </div>
@@ -359,6 +391,29 @@ $flash = get_flash();
     margin: .35rem 0 .75rem;
 }
 .pkg-assign-toolbar strong { font-size: .92rem; color: #0f172a; }
+.pkg-assign-locked-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: .75rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: #b45309;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: 999px;
+    padding: .35rem .7rem;
+}
+.pkg-assign-locked-note {
+    margin-bottom: .85rem;
+    padding: .75rem .9rem;
+    border-radius: 10px;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    color: #92400e;
+    font-size: .875rem;
+    font-weight: 500;
+}
 
 #pkgProductTable {
     border-collapse: separate;
@@ -475,6 +530,7 @@ $flash = get_flash();
 
 <script>
 (function () {
+    const assignmentLocked = <?= $assignmentLocked ? 'true' : 'false' ?>;
     const products = <?= json_encode($productJson, JSON_UNESCAPED_UNICODE) ?>;
     const packages = <?= json_encode($packageJson, JSON_UNESCAPED_UNICODE) ?>;
     const pkgSelect = document.getElementById('package_id');
@@ -514,7 +570,7 @@ $flash = get_flash();
         if (stat) stat.textContent = amt > 0 ? (currencyPrefix + fmt(amt)) : '—';
         const sumPkg = document.getElementById('sumPackage');
         if (sumPkg) sumPkg.textContent = fmt(amt);
-        recalc();
+        if (!assignmentLocked) recalc();
     }
 
     function syncRow(row) {
@@ -532,6 +588,7 @@ $flash = get_flash();
     }
 
     function recalc() {
+        if (assignmentLocked || !body) return;
         let total = 0;
         body.querySelectorAll('.pkg-product-row').forEach((row) => {
             syncRow(row);
@@ -555,6 +612,7 @@ $flash = get_flash();
     }
 
     function bindRow(row) {
+        if (assignmentLocked) return;
         const sel = row.querySelector('.pkg-product-select');
         const qty = row.querySelector('.pkg-qty');
         const remove = row.querySelector('.pkg-remove-row');
@@ -573,7 +631,7 @@ $flash = get_flash();
     }
 
     function addRow() {
-        if (!tpl || !body) return;
+        if (assignmentLocked || !tpl || !body) return;
         clearEmptyRow();
         const node = tpl.content.cloneNode(true);
         const row = node.querySelector('.pkg-product-row');
@@ -588,13 +646,17 @@ $flash = get_flash();
             if (id) {
                 window.location = 'package-assign-products.php?package_id=' + encodeURIComponent(id);
             } else {
-                syncPackage();
+                window.location = 'package-assign-products.php';
             }
         });
     }
-    if (addBtn) addBtn.addEventListener('click', addRow);
-    body.querySelectorAll('.pkg-product-row').forEach(bindRow);
-    syncPackage();
+    if (addBtn && !assignmentLocked) addBtn.addEventListener('click', addRow);
+    if (!assignmentLocked) {
+        body.querySelectorAll('.pkg-product-row').forEach(bindRow);
+        syncPackage();
+    } else {
+        syncPackage();
+    }
 })();
 </script>
 

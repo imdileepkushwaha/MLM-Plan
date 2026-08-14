@@ -127,7 +127,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const label = btn.querySelector('span');
             const original = label ? label.textContent : 'Copy';
-            const isIconCopy = btn.classList.contains('actx-copy-btn');
+            const isIconCopy = btn.classList.contains('actx-copy-btn') || btn.classList.contains('urs-copy');
 
             const markCopied = () => {
                 btn.classList.add('is-copied');
@@ -471,6 +471,15 @@ document.addEventListener('DOMContentLoaded', () => {
         syncHiddenName(countrySel, countryName);
         syncHiddenName(stateSel, stateName);
         syncHiddenName(citySel, cityName);
+
+        const aadharForm = document.getElementById('aadharKycForm');
+        if (aadharForm) {
+            aadharForm.addEventListener('submit', () => {
+                syncHiddenName(countrySel, countryName);
+                syncHiddenName(stateSel, stateName);
+                syncHiddenName(citySel, cityName);
+            });
+        }
 
         // If country already selected (e.g. India default) but state list empty, load via AJAX
         if (countrySel.value && stateSel.options.length <= 1) {

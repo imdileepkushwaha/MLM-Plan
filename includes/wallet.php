@@ -319,6 +319,7 @@ function wallet_ref_label(string $refType): string
         'activation_refund' => 'Activation Refund',
         'topup_request' => 'Topup Request',
         'shopping' => 'Shopping',
+        'product_order' => 'Product Order',
         'manual' => 'Manual',
         default => ucwords(str_replace('_', ' ', $refType)),
     };

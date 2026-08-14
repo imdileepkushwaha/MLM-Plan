@@ -60,6 +60,11 @@ function wd_min_amount(): float
     return max(0, (float) setting('min_withdrawal', '500'));
 }
 
+function wd_max_amount(): float
+{
+    return max(0, (float) setting('max_withdrawal', '0'));
+}
+
 function wd_tds_percent(): float
 {
     return max(0.0, (float) setting('tds_deduction_percent', '5'));
@@ -96,7 +101,7 @@ function wd_calc_breakdown(PDO $pdo, float $gross): array
         $lines[] = ['name' => 'TDS (' . rtrim(rtrim(number_format($tdsPct, 2, '.', ''), '0'), '.') . '%)', 'amount' => $tds];
     }
     if ($fee > 0) {
-        $lines[] = ['name' => 'Processing fee (' . rtrim(rtrim(number_format($feePct, 2, '.', ''), '0'), '.') . '%)', 'amount' => $fee];
+        $lines[] = ['name' => 'Admin charges (' . rtrim(rtrim(number_format($feePct, 2, '.', ''), '0'), '.') . '%)', 'amount' => $fee];
     }
 
     try {
@@ -108,7 +113,7 @@ function wd_calc_breakdown(PDO $pdo, float $gross): array
             if ($tdsPct > 0 && (str_contains($lower, 'tds') || str_contains($lower, 'tax'))) {
                 continue;
             }
-            if ($feePct > 0 && (str_contains($lower, 'processing') || str_contains($lower, 'admin charge') || $lower === 'admin')) {
+            if ($feePct > 0 && (str_contains($lower, 'processing') || str_contains($lower, 'admin charge') || str_contains($lower, 'admin charges') || $lower === 'admin')) {
                 continue;
             }
             $val = (float) ($row['value'] ?? 0);

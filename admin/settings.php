@@ -53,9 +53,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ],
         'withdrawal' => [
             'min_withdrawal',
+            'max_withdrawal',
             'processing_fee_percent',
             'tds_deduction_percent',
-            'daily_closing_admin_charge',
         ],
         'contact' => [
             'contact_person',
@@ -561,11 +561,10 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
 
         <?php elseif ($tab === 'withdrawal'):
-            $currencySymbol = $settings['currency_symbol'] ?? '₹';
             $minPayout = number_format((float) ($settings['min_withdrawal'] ?? 500), 2, '.', '');
-            $processingFee = number_format((float) ($settings['processing_fee_percent'] ?? 1), 2, '.', '');
+            $maxPayout = number_format((float) ($settings['max_withdrawal'] ?? 0), 2, '.', '');
+            $adminCharges = number_format((float) ($settings['processing_fee_percent'] ?? 1), 2, '.', '');
             $tdsDeduction = number_format((float) ($settings['tds_deduction_percent'] ?? 5), 2, '.', '');
-            $dailyAdminCharge = number_format((float) ($settings['daily_closing_admin_charge'] ?? 0), 2, '.', '');
         ?>
         <form method="post" class="settings-card">
             <input type="hidden" name="tab" value="withdrawal">
@@ -585,15 +584,23 @@ require_once __DIR__ . '/../includes/header.php';
                     <span class="wr-rule-ico green">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 10h.01M18 14h.01"/></svg>
                     </span>
-                    <label for="min_withdrawal">Minimum Payout (<?= e($currencySymbol) ?>)</label>
+                    <label for="min_withdrawal">Minimum Payout (<?= currency_symbol_html() ?>)</label>
                     <input type="number" step="0.01" min="0" id="min_withdrawal" name="min_withdrawal" value="<?= e($minPayout) ?>">
+                </div>
+                <div class="wr-rule-card">
+                    <span class="wr-rule-ico teal">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M12 8v8M8 12h8"/></svg>
+                    </span>
+                    <label for="max_withdrawal">Maximum Payout (<?= currency_symbol_html() ?>)</label>
+                    <input type="number" step="0.01" min="0" id="max_withdrawal" name="max_withdrawal" value="<?= e($maxPayout) ?>">
+                    <small class="field-hint">0 = no limit (only wallet balance applies)</small>
                 </div>
                 <div class="wr-rule-card">
                     <span class="wr-rule-ico blue">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M9 9.5a2.5 2.5 0 014.5 1.5c0 1.5-2.5 2-2.5 3.5M12 16.5v.5"/></svg>
                     </span>
-                    <label for="processing_fee_percent">Processing Fee (%)</label>
-                    <input type="number" step="0.01" min="0" id="processing_fee_percent" name="processing_fee_percent" value="<?= e($processingFee) ?>">
+                    <label for="processing_fee_percent">Admin Charges (%)</label>
+                    <input type="number" step="0.01" min="0" id="processing_fee_percent" name="processing_fee_percent" value="<?= e($adminCharges) ?>">
                 </div>
                 <div class="wr-rule-card">
                     <span class="wr-rule-ico orange">
@@ -601,13 +608,6 @@ require_once __DIR__ . '/../includes/header.php';
                     </span>
                     <label for="tds_deduction_percent">TDS Deduction (%)</label>
                     <input type="number" step="0.01" min="0" id="tds_deduction_percent" name="tds_deduction_percent" value="<?= e($tdsDeduction) ?>">
-                </div>
-                <div class="wr-rule-card">
-                    <span class="wr-rule-ico purple">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 14.5A8.5 8.5 0 1111.5 3a7 7 0 009.5 11.5z"/><circle cx="17.5" cy="5.5" r="0.8" fill="currentColor" stroke="none"/><circle cx="20" cy="8" r="0.55" fill="currentColor" stroke="none"/></svg>
-                    </span>
-                    <label for="daily_closing_admin_charge">Daily Closing Admin Charge (%)</label>
-                    <input type="number" step="0.01" min="0" id="daily_closing_admin_charge" name="daily_closing_admin_charge" value="<?= e($dailyAdminCharge) ?>">
                 </div>
             </div>
             <div class="settings-card-foot">

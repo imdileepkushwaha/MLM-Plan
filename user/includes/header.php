@@ -39,6 +39,9 @@ $kycBadgeAlert = $kycIncomplete > 0;
 $teamPages = ['my-direct', 'my-downline', 'my-treeview', 'level-tree'];
 $teamOpen = in_array($currentPage, $teamPages, true);
 $teamBadge = count($teamPages);
+$shopPages = ['purchase-product', 'purchase-report', 'purchase-invoice'];
+$shopOpen = in_array($currentPage, $shopPages, true);
+$shopBadge = count($shopPages);
 $wdPages = ['withdrawal-fund', 'withdrawal-report'];
 $wdOpen = in_array($currentPage, $wdPages, true);
 $wdPendingBadge = wd_pending_count($pdo, (int) $user['id']);
@@ -122,6 +125,7 @@ $icoTeam = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-wi
 $icoIncome = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3"/><path d="M9 13c6.667 0 6.667-10 0-10"/></svg>';
 $icoWd = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><circle cx="16" cy="15" r="1.5" fill="currentColor" stroke="none"/></svg>';
 $icoWallet = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/><path d="M16 7V5a2 2 0 00-2-2H6"/><circle cx="16" cy="14" r="1.5" fill="currentColor" stroke="none"/></svg>';
+$icoShop = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>';
 $icoReports = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>';
 $icoActivate = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>';
 $icoTpin = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 9h4M7 13h10M15 9h2"/></svg>';
@@ -269,6 +273,25 @@ $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="
             </div>
 
             <div class="up-nav-section">
+                <div class="up-nav-label">Shopping</div>
+                <div class="up-nav-group<?= $shopOpen ? ' is-open' : '' ?>" data-up-nav-group>
+                    <button type="button" class="up-nav-item up-nav-toggle<?= $shopOpen ? ' is-active' : '' ?>" data-up-nav-toggle aria-expanded="<?= $shopOpen ? 'true' : 'false' ?>">
+                        <span class="up-nav-ico"><?= $icoShop ?></span>
+                        <span class="up-nav-text">Product Purchase</span>
+                        <span class="up-nav-badge"><?= (int) $shopBadge ?></span>
+                        <?= $chevron ?>
+                    </button>
+                    <div class="up-nav-sub" id="upNavSubShop">
+                        <div class="up-nav-sub-inner">
+                            <a href="purchase-product.php" class="up-nav-sublink<?= $currentPage === 'purchase-product' ? ' is-active' : '' ?>">Purchase Product</a>
+                            <a href="purchase-report.php" class="up-nav-sublink<?= $currentPage === 'purchase-report' ? ' is-active' : '' ?>">Purchase Report</a>
+                            <a href="purchase-invoice.php" class="up-nav-sublink<?= $currentPage === 'purchase-invoice' ? ' is-active' : '' ?>">Purchase Invoice</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="up-nav-section">
                 <div class="up-nav-label">Withdrawal</div>
                 <div class="up-nav-group<?= $wdOpen ? ' is-open' : '' ?>" data-up-nav-group>
                     <button type="button" class="up-nav-item up-nav-toggle<?= $wdOpen ? ' is-active' : '' ?>" data-up-nav-toggle aria-expanded="<?= $wdOpen ? 'true' : 'false' ?>">
@@ -340,6 +363,9 @@ $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="
                     <a href="wallet-topup-activate.php" data-search="activate member topup">Activate with Topup</a>
                     <a href="wallet-shopping.php" data-search="shopping wallet">Shopping Wallet</a>
                     <a href="wallet-transfer.php" data-search="wallet transfer fund">Wallet Transfer</a>
+                    <a href="purchase-product.php" data-search="purchase product shop buy cart">Purchase Product</a>
+                    <a href="purchase-report.php" data-search="purchase report orders history">Purchase Report</a>
+                    <a href="purchase-invoice.php" data-search="purchase invoice bill">Purchase Invoice</a>
                     <a href="kyc-pan.php" data-search="kyc pan card">Pan Card KYC</a>
                     <a href="kyc-bank.php" data-search="kyc bank detail account">Bank Detail KYC</a>
                     <a href="kyc-aadhar.php" data-search="kyc aadhar address proof">Aadhaar KYC</a>

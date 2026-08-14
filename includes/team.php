@@ -136,9 +136,18 @@ function team_group_by_level(array $downline): array
     return $grouped;
 }
 
-/** Read-only binary tree renderer for user panel. */
-function team_render_tree(PDO $pdo, ?array $member, int $depth, int $maxLevels, int $viewRootId): void
-{
+/** Binary tree renderer for user panel. Vacant slots can open Add Member when $allowAdd. */
+function team_render_tree(
+    PDO $pdo,
+    ?array $member,
+    int $depth,
+    int $maxLevels,
+    int $viewRootId,
+    bool $allowAdd = false,
+    ?int $vacantParentId = null,
+    ?string $vacantPos = null,
+    ?array $vacantParent = null
+): void {
     $level = $depth + 1;
     echo '<li>';
 
@@ -150,26 +159,58 @@ function team_render_tree(PDO $pdo, ?array $member, int $depth, int $maxLevels, 
             $left = team_get_child($pdo, (int) $member['id'], 'left');
             $right = team_get_child($pdo, (int) $member['id'], 'right');
             echo '<ul>';
-            team_render_tree($pdo, $left, $depth + 1, $maxLevels, $viewRootId);
-            team_render_tree($pdo, $right, $depth + 1, $maxLevels, $viewRootId);
+            team_render_tree($pdo, $left, $depth + 1, $maxLevels, $viewRootId, $allowAdd, (int) $member['id'], 'left', $member);
+            team_render_tree($pdo, $right, $depth + 1, $maxLevels, $viewRootId, $allowAdd, (int) $member['id'], 'right', $member);
             echo '</ul>';
         }
     } else {
         echo '<div class="ut-item-node">';
-        echo '<div class="ut-node vacant">';
-        echo '<span class="ut-avatar vacant-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></span>';
-        echo '<div class="ut-name">Vacant</div>';
-        echo '<div class="ut-level">LVL ' . $level . '</div>';
-        echo '</div></div>';
-        if ($level < $maxLevels) {
+        if ($allowAdd && $vacantParentId && $vacantPos && $vacantParent) {
+            team_render_vacant_node(
+                $vacantParentId,
+                $vacantPos,
+                (string) $vacantParent['full_name'],
+                (string) $vacantParent['member_id'],
+                $level
+            );
+        } else {
+            echo '<div class="ut-node vacant">';
+            echo '<span class="ut-avatar vacant-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></span>';
+            echo '<div class="ut-name">Vacant</div>';
+            echo '<div class="ut-level">LVL ' . $level . '</div>';
+            echo '</div>';
+        }
+        echo '</div>';
+        if ($level < $maxLevels && $vacantParentId && $vacantPos && $vacantParent) {
             echo '<ul>';
-            team_render_tree($pdo, null, $depth + 1, $maxLevels, $viewRootId);
-            team_render_tree($pdo, null, $depth + 1, $maxLevels, $viewRootId);
+            team_render_tree($pdo, null, $depth + 1, $maxLevels, $viewRootId, $allowAdd, $vacantParentId, $vacantPos, $vacantParent);
+            team_render_tree($pdo, null, $depth + 1, $maxLevels, $viewRootId, $allowAdd, $vacantParentId, $vacantPos, $vacantParent);
+            echo '</ul>';
+        } elseif ($level < $maxLevels) {
+            echo '<ul>';
+            team_render_tree($pdo, null, $depth + 1, $maxLevels, $viewRootId, $allowAdd);
+            team_render_tree($pdo, null, $depth + 1, $maxLevels, $viewRootId, $allowAdd);
             echo '</ul>';
         }
     }
 
     echo '</li>';
+}
+
+function team_render_vacant_node(int $parentId, string $position, string $parentName, string $parentCode, int $level): void
+{
+    $lvl = max(1, $level);
+    echo '<button type="button" class="ut-node vacant is-add"';
+    echo ' data-parent-id="' . (int) $parentId . '"';
+    echo ' data-position="' . e($position) . '"';
+    echo ' data-parent-name="' . e($parentName) . '"';
+    echo ' data-parent-code="' . e($parentCode) . '"';
+    echo ' data-level="' . $lvl . '"';
+    echo ' title="Add member under ' . e($parentCode ?: $parentName) . ' (' . e(strtoupper($position)) . ')">';
+    echo '<span class="ut-avatar vacant-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>';
+    echo '<div class="ut-name">+ Add</div>';
+    echo '<div class="ut-level">LVL ' . $lvl . '</div>';
+    echo '</button>';
 }
 
 function team_render_node(array $member, int $level, bool $isRoot, int $viewRootId): void

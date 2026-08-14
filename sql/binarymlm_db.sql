@@ -150,6 +150,7 @@ INSERT INTO settings (setting_key, setting_value) VALUES
 ('level_9_percent', '0.5'),
 ('level_10_percent', '0.5'),
 ('min_withdrawal', '500'),
+('max_withdrawal', '0'),
 ('processing_fee_percent', '1'),
 ('tds_deduction_percent', '5'),
 ('daily_closing_admin_charge', '0'),

@@ -37,9 +37,9 @@ $form = [
     'gender' => $_POST['gender'] ?? '',
     'email' => trim($_POST['email'] ?? ''),
     'phone' => trim($_POST['phone'] ?? ''),
-    'dob_y' => $_POST['dob_y'] ?? '',
-    'dob_m' => $_POST['dob_m'] ?? '',
-    'dob_d' => $_POST['dob_d'] ?? '',
+    'dob_y' => reg_form_dob_value($_POST['dob_y'] ?? '', 'y'),
+    'dob_m' => reg_form_dob_value($_POST['dob_m'] ?? '', 'm'),
+    'dob_d' => reg_form_dob_value($_POST['dob_d'] ?? '', 'd'),
     'agree' => isset($_POST['agree']),
 ];
 
@@ -67,9 +67,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'gender' => $gender,
         'email' => $email,
         'phone' => $phone,
-        'dob_y' => $dobY ? (string) $dobY : '',
-        'dob_m' => $dobM ? sprintf('%02d', $dobM) : '',
-        'dob_d' => $dobD ? sprintf('%02d', $dobD) : '',
+        'dob_y' => reg_form_dob_value($_POST['dob_y'] ?? '', 'y'),
+        'dob_m' => reg_form_dob_value($_POST['dob_m'] ?? '', 'm'),
+        'dob_d' => reg_form_dob_value($_POST['dob_d'] ?? '', 'd'),
         'agree' => isset($_POST['agree']),
     ];
 
@@ -143,7 +143,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$errors && $sponsor && $placementId) {
         $memberCode = reg_unique_member_id($pdo);
-        $username = reg_unique_username($pdo, $email, $fullName);
+        $username = reg_unique_username($pdo, $fullName);
         $hash = password_hash($password, PASSWORD_DEFAULT);
         $allowedTitles = ['Mr', 'Mrs', 'Ms', 'Miss', 'Dr'];
         if (!in_array($nameTitle, $allowedTitles, true)) {
@@ -180,10 +180,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['reg_success'] = [
                 'member_id' => $memberCode,
                 'username' => $username,
+                'password' => $password,
                 'full_name' => $fullName,
                 'name_title' => $nameTitle,
-                'email' => $email,
-                'position' => $position,
             ];
             header('Location: register-success.php');
             exit;
@@ -367,29 +366,29 @@ $months = [
                     <div class="ureg-dob-grid">
                         <div class="ureg-input-ico">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-                            <select name="dob_y" aria-label="Year" required>
+                            <select name="dob_y" id="dob_y" aria-label="Year" data-reg-dob="<?= e($form['dob_y']) ?>" required>
                                 <option value="">Year</option>
                                 <?php foreach ($years as $y): ?>
-                                    <option value="<?= $y ?>" <?= (string) $form['dob_y'] === (string) $y ? 'selected' : '' ?>><?= $y ?></option>
+                                    <option value="<?= $y ?>" <?= reg_dob_option_selected((string) $form['dob_y'], (string) $y, 'y') ? 'selected' : '' ?>><?= $y ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
                         <div class="ureg-input-ico">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-                            <select name="dob_m" aria-label="Month" required>
+                            <select name="dob_m" id="dob_m" aria-label="Month" data-reg-dob="<?= e($form['dob_m']) ?>" required>
                                 <option value="">Month</option>
                                 <?php foreach ($months as $mv => $ml): ?>
-                                    <option value="<?= $mv ?>" <?= $form['dob_m'] === $mv ? 'selected' : '' ?>><?= $ml ?></option>
+                                    <option value="<?= $mv ?>" <?= reg_dob_option_selected((string) $form['dob_m'], (string) $mv, 'm') ? 'selected' : '' ?>><?= $ml ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
                         <div class="ureg-input-ico">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-                            <select name="dob_d" aria-label="Day" required>
+                            <select name="dob_d" id="dob_d" aria-label="Day" data-reg-dob="<?= e($form['dob_d']) ?>" required>
                                 <option value="">Day</option>
                                 <?php for ($d = 1; $d <= 31; $d++):
                                     $ds = sprintf('%02d', $d); ?>
-                                    <option value="<?= $ds ?>" <?= $form['dob_d'] === $ds ? 'selected' : '' ?>><?= $d ?></option>
+                                    <option value="<?= $ds ?>" <?= reg_dob_option_selected((string) $form['dob_d'], (string) $ds, 'd') ? 'selected' : '' ?>><?= $d ?></option>
                                 <?php endfor; ?>
                             </select>
                         </div>
@@ -448,7 +447,7 @@ $months = [
                 </div>
 
                 <label class="ureg-agree">
-                    <input type="checkbox" name="agree" value="1" <?= !empty($form['agree']) ? 'checked' : '' ?> required>
+                    <input type="checkbox" name="agree" value="1" <?= !empty($form['agree']) ? 'checked' : '' ?>>
                     <span>I agree to the <a href="#e-contract" id="uregContractLink">E-Contract</a></span>
                 </label>
             </section>
@@ -525,6 +524,21 @@ $months = [
             if (typeof dlg.showModal === 'function') dlg.showModal();
         });
     }
+
+    document.querySelectorAll('[data-reg-dob]').forEach((sel) => {
+        const saved = sel.getAttribute('data-reg-dob') || '';
+        if (saved && [...sel.options].some((o) => o.value === saved)) {
+            sel.value = saved;
+        }
+    });
+
+    const syncSelectVisual = (sel) => {
+        sel.classList.toggle('has-value', sel.value !== '');
+    };
+    document.querySelectorAll('.ureg-form select').forEach((sel) => {
+        syncSelectVisual(sel);
+        sel.addEventListener('change', () => syncSelectVisual(sel));
+    });
 
     /* Highlight step on scroll */
     const steps = document.querySelectorAll('.ureg-step');

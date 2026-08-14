@@ -146,15 +146,33 @@ function user_logout_session(): void
 
 function currency(float $amount): string
 {
-    $symbol = setting('currency_symbol', '₹');
-    $code = setting('currency', 'INR');
+    $symbol = currency_symbol();
+    $code = strtoupper(setting('currency', 'INR'));
 
-    // Prefer HTML entity for INR so encoding never breaks (avoids Ôé╣)
-    if (strtoupper($code) === 'INR' || $symbol === '₹' || $symbol === 'Rs' || $symbol === 'Rs.' || preg_match('/Ôé╣|Ã¢/', $symbol)) {
+    // Prefer HTML entity for INR so encoding never breaks (avoids mojibake like â‚¹)
+    if ($symbol === '₹' || strtoupper($code) === 'INR' || $symbol === 'Rs' || $symbol === 'Rs.') {
         return '&#8377;' . number_format($amount, 2);
     }
 
     return htmlspecialchars($symbol, ENT_QUOTES, 'UTF-8') . number_format($amount, 2);
+}
+
+/** Normalized currency symbol for display (fixes corrupted UTF-8 in DB). */
+function currency_symbol(): string
+{
+    $symbol = trim(setting('currency_symbol', '₹'));
+    $code = strtoupper(setting('currency', 'INR'));
+    if ($symbol === '' || $symbol === '₹' || $code === 'INR' || $symbol === 'Rs' || $symbol === 'Rs.'
+        || preg_match('/Ôé╣|Ã¢|â‚¹/u', $symbol)) {
+        return '₹';
+    }
+    return $symbol;
+}
+
+/** HTML-safe currency symbol for labels (INR uses &#8377;). */
+function currency_symbol_html(): string
+{
+    return currency_symbol() === '₹' ? '&#8377;' : htmlspecialchars(currency_symbol(), ENT_QUOTES, 'UTF-8');
 }
 
 function e(?string $str): string

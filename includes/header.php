@@ -9,7 +9,7 @@ $adminName = $_SESSION['admin_name'] ?? 'Admin';
 
 $utilityPages = [
     'countries', 'states', 'cities', 'banks', 'bank-accounts',
-    'deductions', 'news', 'plans', 'package-plans', 'direct-member-login',
+    'news', 'plans', 'package-plans', 'direct-member-login',
 ];
 $utilityOpen = in_array($currentPage, $utilityPages, true);
 
@@ -154,7 +154,6 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
                         <a href="cities.php" class="<?= $currentPage === 'cities' ? 'active' : '' ?>"><span class="dot"></span>Add City</a>
                         <a href="banks.php" class="<?= $currentPage === 'banks' ? 'active' : '' ?>"><span class="dot"></span>Add Bank</a>
                         <a href="bank-accounts.php" class="<?= $currentPage === 'bank-accounts' ? 'active' : '' ?>"><span class="dot"></span>Bank Account Add</a>
-                        <a href="deductions.php" class="<?= $currentPage === 'deductions' ? 'active' : '' ?>"><span class="dot"></span>Deduction Master</a>
                         <a href="news.php" class="<?= $currentPage === 'news' ? 'active' : '' ?>"><span class="dot"></span>News Add</a>
                         <a href="plans.php" class="<?= $currentPage === 'plans' ? 'active' : '' ?>"><span class="dot"></span>Add Plan</a>
                         <a href="package-plans.php" class="<?= $currentPage === 'package-plans' ? 'active' : '' ?>"><span class="dot"></span>Package Plan Master</a>

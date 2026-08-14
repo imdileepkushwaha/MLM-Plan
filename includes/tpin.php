@@ -358,6 +358,104 @@ function tpin_find_usable(PDO $pdo, string $pinCode, int $memberId): ?array
 }
 
 /**
+ * Activate / upgrade $target using a T-Pin from $owner's wallet.
+ * Pin must be unused and assigned to $owner (not company stock).
+ * @return array{ok:bool,error:?string,mode:?string,package:?array}
+ */
+function tpin_redeem_for_target(PDO $pdo, array $owner, array $target, string $pinCode): array
+{
+    require_once __DIR__ . '/activation.php';
+    tpin_ensure_tables($pdo);
+
+    $ownerId = (int) ($owner['id'] ?? 0);
+    $targetId = (int) ($target['id'] ?? 0);
+    if ($ownerId < 1 || $targetId < 1) {
+        return ['ok' => false, 'error' => 'Invalid members.', 'mode' => null, 'package' => null];
+    }
+    if (($owner['status'] ?? '') === 'blocked' || ($target['status'] ?? '') === 'blocked') {
+        return ['ok' => false, 'error' => 'Account is blocked.', 'mode' => null, 'package' => null];
+    }
+    if (!empty($target['package_id'])) {
+        return ['ok' => false, 'error' => 'Member is already activated.', 'mode' => null, 'package' => null];
+    }
+
+    $pending = activation_pending_request($pdo, $targetId);
+    if ($pending) {
+        return [
+            'ok' => false,
+            'error' => 'This member already has a pending activation request.',
+            'mode' => null,
+            'package' => null,
+        ];
+    }
+
+    $code = tpin_normalize_code($pinCode);
+    if ($code === '') {
+        return ['ok' => false, 'error' => 'Enter your T-Pin.', 'mode' => null, 'package' => null];
+    }
+
+    try {
+        $pdo->beginTransaction();
+
+        $stmt = $pdo->prepare("
+            SELECT tp.*, p.name AS package_name, p.amount, p.bv, p.status AS package_status, p.validity_days, p.description
+            FROM topup_pins tp
+            JOIN packages p ON p.id = tp.package_id
+            WHERE tp.pin_code = ? AND tp.status = 'unused'
+            LIMIT 1
+            FOR UPDATE
+        ");
+        $stmt->execute([$code]);
+        $pin = $stmt->fetch();
+        if (!$pin) {
+            $pdo->rollBack();
+            return ['ok' => false, 'error' => 'Invalid, used, or blocked T-Pin.', 'mode' => null, 'package' => null];
+        }
+
+        $assigned = (int) ($pin['assigned_to'] ?? 0);
+        if ($assigned !== $ownerId) {
+            $pdo->rollBack();
+            return ['ok' => false, 'error' => 'This T-Pin is not in your pin wallet.', 'mode' => null, 'package' => null];
+        }
+        if (($pin['package_status'] ?? '') !== 'active') {
+            $pdo->rollBack();
+            return ['ok' => false, 'error' => 'Package linked to this T-Pin is inactive.', 'mode' => null, 'package' => null];
+        }
+
+        $packageId = (int) $pin['package_id'];
+        $mark = $pdo->prepare("
+            UPDATE topup_pins
+            SET status = 'used', used_by = ?, used_at = NOW(), assigned_to = ?
+            WHERE id = ? AND status = 'unused'
+        ");
+        $mark->execute([$targetId, $ownerId, (int) $pin['id']]);
+        if ($mark->rowCount() < 1) {
+            $pdo->rollBack();
+            return ['ok' => false, 'error' => 'T-Pin was just used by someone else.', 'mode' => null, 'package' => null];
+        }
+
+        $pdo->commit();
+
+        $result = activation_apply($pdo, $target, $packageId);
+        if (!$result['ok']) {
+            tpin_restore_unused($pdo, (int) $pin['id'], $targetId, $ownerId);
+            return [
+                'ok' => false,
+                'error' => $result['error'] ?? 'Activation failed.',
+                'mode' => 'activation',
+                'package' => null,
+            ];
+        }
+        return ['ok' => true, 'error' => null, 'mode' => 'activation', 'package' => $result['package']];
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        return ['ok' => false, 'error' => 'Could not activate with T-Pin. Try again.', 'mode' => null, 'package' => null];
+    }
+}
+
+/**
  * Instant activate / upgrade using Type A T-Pin.
  * @return array{ok:bool,error:?string,mode:?string,package:?array}
  */

@@ -1,6 +1,14 @@
 <?php
 $pageTitle = 'Edit Profile';
-require_once __DIR__ . '/includes/header.php';
+require_once __DIR__ . '/includes/auth.php';
+require_user();
+
+$user = current_user($pdo);
+if (!$user || ($user['status'] ?? '') === 'blocked') {
+    unset($_SESSION['user_id'], $_SESSION['user_name'], $_SESSION['user_code']);
+    header('Location: login.php');
+    exit;
+}
 
 $errors = [];
 
@@ -43,6 +51,8 @@ $form = [
 $initials = user_initials((string) $form['full_name']);
 $status = member_effective_status($user);
 $packageName = $user['package_name'] ?? '—';
+
+require_once __DIR__ . '/includes/header.php';
 ?>
 <div class="up-page-head">
     <div>

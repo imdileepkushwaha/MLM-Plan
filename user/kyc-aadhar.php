@@ -41,6 +41,7 @@ $form = [
     'pincode' => $_POST['pincode'] ?? ($doc['pincode'] ?? ''),
     'country_id' => (int) ($_POST['country_id'] ?? 0),
     'state_id' => (int) ($_POST['state_id'] ?? 0),
+    'city_id' => (int) ($_POST['city_id'] ?? 0),
 ];
 
 // Resolve selected country/state ids from saved names for dropdowns
@@ -91,6 +92,14 @@ if ($form['state_id'] > 0) {
         $cities = [];
     }
 }
+if (!$form['city_id'] && $form['city'] !== '') {
+    foreach ($cities as $c) {
+        if (strcasecmp($c['name'], $form['city']) === 0) {
+            $form['city_id'] = (int) $c['id'];
+            break;
+        }
+    }
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$canEdit) {
@@ -106,8 +115,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $city = trim($_POST['city'] ?? '');
     $area = trim($_POST['area'] ?? '');
     $pincode = preg_replace('/\s+/', '', trim($_POST['pincode'] ?? ''));
-
-    // Prefer names from dropdown selections
     $countryId = (int) ($_POST['country_id'] ?? 0);
     $stateId = (int) ($_POST['state_id'] ?? 0);
     $cityId = (int) ($_POST['city_id'] ?? 0);
@@ -136,11 +143,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // Use Area when Address box left empty or too short.
+    if ($addressLine === '' && $area !== '') {
+        $addressLine = $area;
+    } elseif (mb_strlen($addressLine) < 5 && $area !== '') {
+        $addressLine = trim($addressLine . ($addressLine !== '' ? ', ' : '') . $area);
+    }
+
     if ($aadharNumber === '' || !preg_match('/^[0-9]{12}$/', $aadharNumber)) {
         $errors[] = 'Enter a valid 12-digit Aadhaar number.';
     }
-    if ($addressLine === '' || strlen($addressLine) < 8) {
-        $errors[] = 'Enter your residential address.';
+    if ($addressLine === '' || mb_strlen($addressLine) < 5) {
+        $errors[] = 'Enter house / flat / street in the Address field (at least 5 characters).';
     }
     if ($country === '') $errors[] = 'Please select country.';
     if ($state === '') $errors[] = 'Please select state.';
@@ -199,6 +213,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'pincode' => $pincode,
         'country_id' => $countryId,
         'state_id' => $stateId,
+        'city_id' => $cityId,
     ];
 }
 
@@ -371,8 +386,9 @@ $cloudIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-
                         </div>
 
                         <div class="up-field full">
-                            <label for="address_line"><span class="ad-lab-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span> Address</label>
-                            <textarea id="address_line" name="address_line" rows="3" placeholder="House / street / landmark" <?= $canEdit ? 'required' : 'disabled' ?>><?= e($form['address_line']) ?></textarea>
+                            <label for="address_line"><span class="ad-lab-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span> House / Flat / Street</label>
+                            <textarea id="address_line" name="address_line" rows="3" placeholder="e.g. 12, Green Park, MG Road" minlength="5" <?= $canEdit ? 'required' : 'disabled' ?>><?= e($form['address_line']) ?></textarea>
+                            <small class="ad-field-hint">Required — enter your house, flat or street. Area/locality goes in the field below.</small>
                         </div>
 
                         <div class="ad-addr-grid">
@@ -401,7 +417,7 @@ $cloudIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-
                                 <select id="city_id" name="city_id" data-geo="city" <?= $canEdit ? 'required' : 'disabled' ?>>
                                     <option value="">Select city</option>
                                     <?php foreach ($cities as $c): ?>
-                                        <option value="<?= (int) $c['id'] ?>" <?= strcasecmp($c['name'], $form['city']) === 0 ? 'selected' : '' ?>><?= e($c['name']) ?></option>
+                                        <option value="<?= (int) $c['id'] ?>" <?= ($form['city_id'] ?? 0) === (int) $c['id'] || (($form['city_id'] ?? 0) === 0 && strcasecmp($c['name'], $form['city']) === 0) ? 'selected' : '' ?>><?= e($c['name']) ?></option>
                                     <?php endforeach; ?>
                                 </select>
                                 <input type="hidden" name="city" id="city_name" value="<?= e($form['city']) ?>">

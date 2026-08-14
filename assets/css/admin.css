@@ -3793,6 +3793,7 @@ input, select, textarea{
 
 .wr-rule-ico svg { width: 18px; height: 18px; stroke: currentColor; }
 .wr-rule-ico.green { background: #d1fae5; color: #059669; }
+.wr-rule-ico.teal { background: #ccfbf1; color: #0d9488; }
 .wr-rule-ico.blue { background: #dbeafe; color: #2563eb; }
 .wr-rule-ico.orange { background: #ffedd5; color: #ea580c; }
 .wr-rule-ico.purple { background: #ede9fe; color: #7c3aed; }

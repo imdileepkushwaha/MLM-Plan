@@ -217,65 +217,6 @@ $transactions = array_slice($transactions, 0, 8);
                 </div>
             </div>
 
-            <div class="pp-card pp-contact">
-                <div class="pp-contact-banner">
-                    <div>
-                        <span class="pp-contact-kicker">Account details</span>
-                        <h3>Contact Information</h3>
-                        <p>Reach & membership details for your profile.</p>
-                    </div>
-                    <a href="edit-profile.php" class="pp-contact-edit" title="Edit profile">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
-                    </a>
-                </div>
-                <ul class="pp-contact-list">
-                    <li>
-                        <span class="pp-ci purple" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h16v16H4z"/><path d="M22 6l-10 7L2 6"/></svg>
-                        </span>
-                        <div class="pp-contact-body">
-                            <small>Email</small>
-                            <strong><a href="mailto:<?= e($user['email']) ?>"><?= e($user['email']) ?></a></strong>
-                        </div>
-                        <span class="pp-contact-tag">Primary</span>
-                    </li>
-                    <li>
-                        <span class="pp-ci teal" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
-                        </span>
-                        <div class="pp-contact-body">
-                            <small>Phone</small>
-                            <?php if (!empty($user['phone'])): ?>
-                            <strong><a href="tel:<?= e(preg_replace('/\s+/', '', $user['phone'])) ?>"><?= e($user['phone']) ?></a></strong>
-                            <?php else: ?>
-                            <strong class="is-muted">Not set</strong>
-                            <?php endif; ?>
-                        </div>
-                        <span class="pp-contact-tag teal">Mobile</span>
-                    </li>
-                    <li>
-                        <span class="pp-ci indigo" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-                        </span>
-                        <div class="pp-contact-body">
-                            <small>Timezone</small>
-                            <strong>Asia/Kolkata (IST)</strong>
-                        </div>
-                        <span class="pp-contact-tag indigo">UTC+5:30</span>
-                    </li>
-                    <li>
-                        <span class="pp-ci green" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
-                        </span>
-                        <div class="pp-contact-body">
-                            <small>Package</small>
-                            <strong><?= e($user['package_name'] ?? 'No package') ?></strong>
-                        </div>
-                        <span class="pp-contact-tag green"><?= $packageAmount > 0 ? currency($packageAmount) : 'N/A' ?></span>
-                    </li>
-                </ul>
-            </div>
-
             <div class="pp-card pp-ref-section">
                 <div class="pp-panel-banner is-coral">
                     <div class="pp-panel-banner-main">
@@ -341,6 +282,66 @@ $transactions = array_slice($transactions, 0, 8);
                     </div>
                 </div>
             </div>
+
+            <div class="pp-card pp-contact">
+                <div class="pp-contact-banner">
+                    <div>
+                        <span class="pp-contact-kicker">Account details</span>
+                        <h3>Contact Information</h3>
+                        <p>Reach & membership details for your profile.</p>
+                    </div>
+                    <a href="edit-profile.php" class="pp-contact-edit" title="Edit profile">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+                    </a>
+                </div>
+                <ul class="pp-contact-list">
+                    <li>
+                        <span class="pp-ci purple" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h16v16H4z"/><path d="M22 6l-10 7L2 6"/></svg>
+                        </span>
+                        <div class="pp-contact-body">
+                            <small>Email</small>
+                            <strong><a href="mailto:<?= e($user['email']) ?>"><?= e($user['email']) ?></a></strong>
+                        </div>
+                        <span class="pp-contact-tag">Primary</span>
+                    </li>
+                    <li>
+                        <span class="pp-ci teal" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+                        </span>
+                        <div class="pp-contact-body">
+                            <small>Phone</small>
+                            <?php if (!empty($user['phone'])): ?>
+                            <strong><a href="tel:<?= e(preg_replace('/\s+/', '', $user['phone'])) ?>"><?= e($user['phone']) ?></a></strong>
+                            <?php else: ?>
+                            <strong class="is-muted">Not set</strong>
+                            <?php endif; ?>
+                        </div>
+                        <span class="pp-contact-tag teal">Mobile</span>
+                    </li>
+                    <li>
+                        <span class="pp-ci indigo" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                        </span>
+                        <div class="pp-contact-body">
+                            <small>Timezone</small>
+                            <strong>Asia/Kolkata (IST)</strong>
+                        </div>
+                        <span class="pp-contact-tag indigo">UTC+5:30</span>
+                    </li>
+                    <li>
+                        <span class="pp-ci green" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
+                        </span>
+                        <div class="pp-contact-body">
+                            <small>Package</small>
+                            <strong><?= e($user['package_name'] ?? 'No package') ?></strong>
+                        </div>
+                        <span class="pp-contact-tag green"><?= $packageAmount > 0 ? currency($packageAmount) : 'N/A' ?></span>
+                    </li>
+                </ul>
+            </div>
+
         </aside>
 
         <!-- Right column -->

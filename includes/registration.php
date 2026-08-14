@@ -95,12 +95,9 @@ function reg_lookup_sponsor(PDO $pdo, string $code): ?array
     return $row;
 }
 
-function reg_unique_username(PDO $pdo, string $email, string $fullName): string
+function reg_unique_username(PDO $pdo, string $fullName): string
 {
-    $base = strtolower(preg_replace('/[^a-z0-9]/i', '', explode('@', $email)[0] ?? ''));
-    if (strlen($base) < 3) {
-        $base = strtolower(preg_replace('/[^a-z0-9]/i', '', $fullName));
-    }
+    $base = strtolower(preg_replace('/[^a-z0-9]/i', '', trim($fullName)));
     if (strlen($base) < 3) {
         $base = 'member';
     }
@@ -119,6 +116,36 @@ function reg_unique_username(PDO $pdo, string $email, string $fullName): string
             return $base . bin2hex(random_bytes(2));
         }
     }
+}
+
+/** Normalize DOB field for repopulating registration form (keeps leading zeros for month/day). */
+function reg_form_dob_value(?string $raw, string $part): string
+{
+    $raw = trim((string) $raw);
+    if ($raw === '') {
+        return '';
+    }
+    if ($part === 'y') {
+        $y = (int) $raw;
+        return $y > 0 ? (string) $y : '';
+    }
+    $max = $part === 'm' ? 12 : 31;
+    $n = (int) $raw;
+    if ($n >= 1 && $n <= $max) {
+        return sprintf('%02d', $n);
+    }
+    return $raw;
+}
+
+function reg_dob_option_selected(string $saved, string $optionValue, string $part): bool
+{
+    if ($saved === '' || $optionValue === '') {
+        return false;
+    }
+    if ($part === 'y') {
+        return (string) (int) $saved === (string) (int) $optionValue;
+    }
+    return reg_form_dob_value($saved, $part) === reg_form_dob_value($optionValue, $part);
 }
 
 function reg_unique_member_id(PDO $pdo): string

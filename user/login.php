@@ -1,6 +1,8 @@
 <?php
 require_once __DIR__ . '/includes/auth.php';
 
+unset($_SESSION['reg_success']);
+
 $maintenanceOn = is_maintenance_mode();
 $wasSignedOut = false;
 

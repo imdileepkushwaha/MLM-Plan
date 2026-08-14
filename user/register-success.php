@@ -7,7 +7,7 @@ if (!empty($_SESSION['user_id'])) {
 }
 
 $info = $_SESSION['reg_success'] ?? null;
-if (!$info || empty($info['username'])) {
+if (!$info || empty($info['member_id'])) {
     header('Location: register.php');
     exit;
 }
@@ -15,10 +15,8 @@ if (!$info || empty($info['username'])) {
 // One-time view — clear after read so refresh still works this session, but new visit without reg goes to register
 $company = setting('company_name', 'Binary MLM');
 $fullName = trim(($info['name_title'] ?? '') . ' ' . ($info['full_name'] ?? ''));
-$username = (string) ($info['username'] ?? '');
 $memberId = (string) ($info['member_id'] ?? '');
-$email = (string) ($info['email'] ?? '');
-$position = ucfirst((string) ($info['position'] ?? ''));
+$password = (string) ($info['password'] ?? '');
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -58,39 +56,31 @@ $position = ucfirst((string) ($info['position'] ?? ''));
 
         <dl class="urs-details">
             <div>
-                <dt>Username</dt>
-                <dd>
-                    <span id="ursUsername"><?= e($username) ?></span>
-                    <button type="button" class="urs-copy" data-copy-text="<?= e($username) ?>" title="Copy username">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-                    </button>
-                </dd>
-            </div>
-            <div>
                 <dt>Member ID</dt>
                 <dd>
                     <span id="ursMemberId"><?= e($memberId) ?></span>
-                    <button type="button" class="urs-copy" data-copy-text="<?= e($memberId) ?>" title="Copy member ID">
+                    <button type="button" class="urs-copy" data-copy-text="<?= e($memberId) ?>" data-label="Copy member ID" title="Copy member ID" aria-label="Copy member ID">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
                     </button>
                 </dd>
             </div>
-            <?php if ($email !== ''): ?>
             <div>
-                <dt>Email</dt>
-                <dd><?= e($email) ?></dd>
+                <dt>Password</dt>
+                <dd>
+                    <?php if ($password !== ''): ?>
+                    <span id="ursPassword"><?= e($password) ?></span>
+                    <button type="button" class="urs-copy" data-copy-text="<?= e($password) ?>" data-label="Copy password" title="Copy password" aria-label="Copy password">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                    </button>
+                    <?php else: ?>
+                    <span class="urs-muted">Not available — register again or use Forgot Password on login.</span>
+                    <?php endif; ?>
+                </dd>
             </div>
-            <?php endif; ?>
-            <?php if ($position !== ''): ?>
-            <div>
-                <dt>Position</dt>
-                <dd><?= e($position) ?> leg</dd>
-            </div>
-            <?php endif; ?>
         </dl>
 
         <div class="urs-note">
-            Use your <strong>username</strong>, email, or Member ID with your password to sign in.
+            Save your <strong>Member ID</strong> and <strong>password</strong> — you'll need them to sign in.
         </div>
 
         <div class="urs-actions">

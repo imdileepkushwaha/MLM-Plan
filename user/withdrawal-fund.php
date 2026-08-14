@@ -16,9 +16,14 @@ if (!$user || ($user['status'] ?? '') === 'blocked') {
 $uid = (int) $user['id'];
 $errors = [];
 $minAmt = wd_min_amount();
+$maxAmt = wd_max_amount();
 $wallet = (float) $user['wallet_balance']; // Income Wallet
 $pendingSum = wd_pending_sum($pdo, $uid);
 $available = wd_available_balance($pdo, $user);
+$withdrawMax = $available;
+if ($maxAmt > 0) {
+    $withdrawMax = min($available, $maxAmt);
+}
 $prefills = wd_kyc_bank_prefills($pdo, $uid);
 $tdsPct = wd_tds_percent();
 $feePct = wd_fee_percent();
@@ -48,6 +53,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'Enter a valid withdrawal amount.';
     } elseif ($amount < $minAmt) {
         $errors[] = 'Minimum withdrawal is ' . strip_tags(currency($minAmt)) . '.';
+    } elseif ($maxAmt > 0 && $amount > $maxAmt + 0.00001) {
+        $errors[] = 'Maximum withdrawal per request is ' . strip_tags(currency($maxAmt)) . '.';
     } elseif ($amount > $available + 0.00001) {
         $errors[] = 'Amount exceeds available balance (wallet minus pending requests).';
     }
@@ -169,17 +176,28 @@ require_once __DIR__ . '/includes/header.php';
                             <strong><?= currency($minAmt) ?></strong>
                         </div>
                     </div>
+                    <?php if ($maxAmt > 0): ?>
+                    <div class="wd-form-chip is-max">
+                        <span class="wd-form-chip-ico" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M12 8v8M8 12h8"/></svg>
+                        </span>
+                        <div>
+                            <small>Maximum</small>
+                            <strong><?= currency($maxAmt) ?></strong>
+                        </div>
+                    </div>
+                    <?php endif; ?>
                 </div>
 
                 <div class="wd-form-grid">
                     <div class="wd-field">
                         <label for="amount" class="wd-label-row">
                             <span>Amount</span>
-                            <small class="wd-hint">Max <?= currency($available) ?></small>
+                            <small class="wd-hint">Max <?= currency($withdrawMax) ?></small>
                         </label>
                         <div class="wd-amount">
                             <span class="wd-amount-prefix" aria-hidden="true">&#8377;</span>
-                            <input type="number" step="0.01" min="<?= e((string) $minAmt) ?>" max="<?= e((string) $available) ?>"
+                            <input type="number" step="0.01" min="<?= e((string) $minAmt) ?>" max="<?= e((string) $withdrawMax) ?>"
                                    id="amount" name="amount" value="<?= e($form['amount']) ?>"
                                    placeholder="0.00" required <?= $available < $minAmt ? 'disabled' : '' ?>>
                             <button type="button" class="wd-amount-max" id="wdMaxBtn" <?= $available < $minAmt ? 'disabled' : '' ?>>MAX</button>
@@ -228,7 +246,7 @@ require_once __DIR__ . '/includes/header.php';
                     <div class="wd-break" id="wdBreak">
                         <div class="wd-break-row"><span>Gross request</span><strong id="wdGross">—</strong></div>
                         <div class="wd-break-row"><span>TDS (<?= e(rtrim(rtrim(number_format($tdsPct, 2, '.', ''), '0'), '.')) ?>%)</span><strong id="wdTds">—</strong></div>
-                        <div class="wd-break-row"><span>Processing fee (<?= e(rtrim(rtrim(number_format($feePct, 2, '.', ''), '0'), '.')) ?>%)</span><strong id="wdFee">—</strong></div>
+                        <div class="wd-break-row"><span>Admin charges (<?= e(rtrim(rtrim(number_format($feePct, 2, '.', ''), '0'), '.')) ?>%)</span><strong id="wdFee">—</strong></div>
                         <div class="wd-break-row"><span>Other deductions</span><strong id="wdOther">—</strong></div>
                         <div class="wd-break-row is-net"><span>You receive (net)</span><strong id="wdNet">—</strong></div>
                         <p class="wd-form-note">Income Wallet deducts the <strong>gross</strong> amount on approval. Bank/UPI receives <strong>net</strong> after TDS &amp; fees.</p>
