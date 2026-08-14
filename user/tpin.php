@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../includes/tpin.php';
 require_once __DIR__ . '/includes/auth.php';
 require_user();
+feature_guard_user_page('tpin');
 
 $user = current_user($pdo);
 if (!$user || ($user['status'] ?? '') === 'blocked') {

@@ -178,6 +178,7 @@ try {
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
                 </button>
             </form>
+            <p class="auth-foot" style="margin-top:1rem"><a href="../superadmin/login.php" style="color:#64748b;font-size:.85rem">Super Admin login</a></p>
         </div>
         <p class="auth-foot">&copy; <?= date('Y') ?> <?= e($company) ?></p>
     </div>

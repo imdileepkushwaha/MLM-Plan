@@ -18,6 +18,18 @@ CREATE TABLE IF NOT EXISTS admins (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
+-- Platform Super Admin (plan/features control — separate from client admin)
+CREATE TABLE IF NOT EXISTS super_admins (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    email VARCHAR(100) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    full_name VARCHAR(100) NOT NULL,
+    status ENUM('active','inactive') DEFAULT 'active',
+    last_login DATETIME NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
 -- Packages / Plans
 CREATE TABLE IF NOT EXISTS packages (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -175,7 +187,22 @@ INSERT INTO settings (setting_key, setting_value) VALUES
 ('contact_youtube', ''),
 ('contact_telegram', ''),
 ('contact_form_enabled', '1'),
-('contact_form_notify_email', 'support@binarymlm.com');
+('contact_form_notify_email', 'support@binarymlm.com'),
+('plan_mode', 'hybrid'),
+('feature_preset', 'hybrid_full'),
+('feature_package_enabled', '1'),
+('feature_tpin_enabled', '1'),
+('feature_utr_activation_enabled', '1'),
+('feature_wallet_topup_enabled', '1'),
+('feature_product_shop_enabled', '1'),
+('feature_binary_income', '1'),
+('feature_level_income', '1'),
+('feature_referral_income', '1'),
+('feature_matching_income', '1'),
+('feature_withdrawals_enabled', '1'),
+('feature_kyc_enabled', '1'),
+('feature_utility_enabled', '1'),
+('feature_reports_enabled', '1');
 
 -- Contact form inquiries
 CREATE TABLE IF NOT EXISTS contact_inquiries (

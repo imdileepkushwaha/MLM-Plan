@@ -3,9 +3,23 @@
  * Shared header / sidebar for admin panel
  */
 require_admin();
+feature_guard_admin_page();
 $company = setting('company_name', 'Binary MLM');
 $currentPage = basename($_SERVER['PHP_SELF'], '.php');
 $adminName = $_SESSION['admin_name'] ?? 'Admin';
+
+$featBinary = plan_uses_binary();
+$featLevel = plan_uses_level();
+$featPackages = feature_module_allowed('packages');
+$featProducts = feature_module_allowed('products');
+$featTpin = feature_module_allowed('tpin');
+$featActivations = feature_module_allowed('activations');
+$featWalletTopup = feature_module_allowed('wallet_topup');
+$featWithdrawals = feature_module_allowed('withdrawals');
+$featKyc = feature_module_allowed('kyc');
+$featUtility = feature_module_allowed('utility');
+$featReports = feature_module_allowed('reports');
+$featBinaryClosing = feature_module_allowed('binary_closing');
 
 $utilityPages = [
     'countries', 'states', 'cities', 'banks', 'bank-accounts',
@@ -42,19 +56,25 @@ $notifyCount = 0;
 $actNotifyCount = 0;
 $topupNotifyCount = 0;
 try {
-    $notifyCount = (int) $pdo->query("SELECT COUNT(*) FROM withdrawals WHERE status = 'pending'")->fetchColumn();
+    if ($featWithdrawals) {
+        $notifyCount = (int) $pdo->query("SELECT COUNT(*) FROM withdrawals WHERE status = 'pending'")->fetchColumn();
+    }
 } catch (Throwable $e) {
     $notifyCount = 0;
 }
 try {
-    require_once __DIR__ . '/activation.php';
-    $actNotifyCount = activation_pending_count($pdo);
+    if ($featActivations) {
+        require_once __DIR__ . '/activation.php';
+        $actNotifyCount = activation_pending_count($pdo);
+    }
 } catch (Throwable $e) {
     $actNotifyCount = 0;
 }
 try {
-    require_once __DIR__ . '/wallet_topup.php';
-    $topupNotifyCount = wallet_topup_pending_count($pdo);
+    if ($featWalletTopup) {
+        require_once __DIR__ . '/wallet_topup.php';
+        $topupNotifyCount = wallet_topup_pending_count($pdo);
+    }
 } catch (Throwable $e) {
     $topupNotifyCount = 0;
 }
@@ -99,7 +119,7 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
                     <span class="browse-label">Browse</span>
                     <strong class="browse-nav">Navigation</strong>
                 </div>
-                <span class="browse-pill">Admin</span>
+                <span class="browse-pill">Client Admin</span>
             </div>
         </div>
 
@@ -127,8 +147,12 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
                     </button>
                     <div class="nav-submenu">
                         <a href="members.php" class="<?= in_array($currentPage, ['members', 'member-view', 'member-add', 'member-edit'], true) ? 'active' : '' ?>"><span class="dot"></span>Member List</a>
+                        <?php if ($featKyc): ?>
                         <a href="approve-kyc.php" class="<?= $currentPage === 'approve-kyc' ? 'active' : '' ?>"><span class="dot"></span>Approve KYC</a>
+                        <?php endif; ?>
+                        <?php if ($featBinary): ?>
                         <a href="tree-view.php" class="<?= in_array($currentPage, ['tree-view', 'binary-tree'], true) ? 'active' : '' ?>"><span class="dot"></span>Tree View</a>
+                        <?php endif; ?>
                         <a href="downline.php" class="<?= $currentPage === 'downline' ? 'active' : '' ?>"><span class="dot"></span>Downline</a>
                     </div>
                 </div>
@@ -140,6 +164,7 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
                     <span class="nav-section-line"></span>
                 </div>
 
+                <?php if ($featUtility): ?>
                 <div class="nav-group <?= $utilityOpen ? 'open' : '' ?>" data-nav-group>
                     <button type="button" class="nav-link nav-group-toggle <?= $utilityOpen ? 'active' : '' ?>" data-nav-toggle>
                         <span class="nav-link-left">
@@ -155,12 +180,16 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
                         <a href="banks.php" class="<?= $currentPage === 'banks' ? 'active' : '' ?>"><span class="dot"></span>Add Bank</a>
                         <a href="bank-accounts.php" class="<?= $currentPage === 'bank-accounts' ? 'active' : '' ?>"><span class="dot"></span>Bank Account Add</a>
                         <a href="news.php" class="<?= $currentPage === 'news' ? 'active' : '' ?>"><span class="dot"></span>News Add</a>
+                        <?php if ($featPackages): ?>
                         <a href="plans.php" class="<?= $currentPage === 'plans' ? 'active' : '' ?>"><span class="dot"></span>Add Plan</a>
                         <a href="package-plans.php" class="<?= $currentPage === 'package-plans' ? 'active' : '' ?>"><span class="dot"></span>Package Plan Master</a>
+                        <?php endif; ?>
                         <a href="direct-member-login.php" class="<?= $currentPage === 'direct-member-login' ? 'active' : '' ?>"><span class="dot"></span>Direct Member Login</a>
                     </div>
                 </div>
+                <?php endif; ?>
 
+                <?php if ($featProducts): ?>
                 <div class="nav-group <?= $productOpen ? 'open' : '' ?>" data-nav-group>
                     <button type="button" class="nav-link nav-group-toggle <?= $productOpen ? 'active' : '' ?>" data-nav-toggle>
                         <span class="nav-link-left">
@@ -186,7 +215,9 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
                         <a href="commodity-prices.php" class="<?= $currentPage === 'commodity-prices' ? 'active' : '' ?>"><span class="dot"></span>Add Commodities Price</a>
                     </div>
                 </div>
+                <?php endif; ?>
 
+                <?php if ($featPackages): ?>
                 <div class="nav-group <?= $packageOpen ? 'open' : '' ?>" data-nav-group>
                     <button type="button" class="nav-link nav-group-toggle <?= $packageOpen ? 'active' : '' ?>" data-nav-toggle>
                         <span class="nav-link-left">
@@ -197,10 +228,14 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
                     </button>
                     <div class="nav-submenu">
                         <a href="packages.php" class="<?= $currentPage === 'packages' ? 'active' : '' ?>"><span class="dot"></span>Add Packages</a>
+                        <?php if ($featProducts): ?>
                         <a href="package-assign-products.php" class="<?= $currentPage === 'package-assign-products' ? 'active' : '' ?>"><span class="dot"></span>Assign Product</a>
+                        <?php endif; ?>
                     </div>
                 </div>
+                <?php endif; ?>
 
+                <?php if ($featActivations): ?>
                 <a href="activations.php" class="nav-link <?= $currentPage === 'activations' ? 'active' : '' ?>">
                     <span class="nav-link-left">
                         <?= nav_ico($icoPkg) ?>
@@ -210,7 +245,9 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
                     <span class="nav-badge"><?= $actNotifyCount > 9 ? '9+' : $actNotifyCount ?></span>
                     <?php endif; ?>
                 </a>
+                <?php endif; ?>
 
+                <?php if ($featTpin): ?>
                 <div class="nav-group <?= $tpinOpen ? 'open' : '' ?>" data-nav-group>
                     <button type="button" class="nav-link nav-group-toggle <?= $tpinOpen ? 'active' : '' ?>" data-nav-toggle>
                         <span class="nav-link-left">
@@ -225,6 +262,7 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
                         <a href="tpin-report.php" class="<?= $currentPage === 'tpin-report' ? 'active' : '' ?>"><span class="dot"></span>T-Pin Report</a>
                     </div>
                 </div>
+                <?php endif; ?>
 
                 <a href="commissions.php" class="nav-link <?= $currentPage === 'commissions' ? 'active' : '' ?>">
                     <span class="nav-link-left">
@@ -233,19 +271,23 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
                     </span>
                 </a>
 
+                <?php if ($featBinaryClosing): ?>
                 <a href="binary-closing.php" class="nav-link <?= $currentPage === 'binary-closing' ? 'active' : '' ?>">
                     <span class="nav-link-left">
                         <?= nav_ico($icoTree) ?>
                         <span class="nav-label">Binary Closing</span>
                     </span>
                 </a>
+                <?php endif; ?>
 
+                <?php if ($featWithdrawals): ?>
                 <a href="withdrawals.php" class="nav-link <?= $currentPage === 'withdrawals' ? 'active' : '' ?>">
                     <span class="nav-link-left">
                         <?= nav_ico($icoCard) ?>
                         <span class="nav-label">Withdrawals</span>
                     </span>
                 </a>
+                <?php endif; ?>
 
                 <a href="wallets.php" class="nav-link <?= $currentPage === 'wallets' ? 'active' : '' ?>">
                     <span class="nav-link-left">
@@ -254,6 +296,7 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
                     </span>
                 </a>
 
+                <?php if ($featWalletTopup): ?>
                 <a href="wallet-topup-requests.php" class="nav-link <?= $currentPage === 'wallet-topup-requests' ? 'active' : '' ?>">
                     <span class="nav-link-left">
                         <?= nav_ico($icoMoney) ?>
@@ -263,7 +306,9 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
                     <span class="nav-badge"><?= $topupNotifyCount > 9 ? '9+' : $topupNotifyCount ?></span>
                     <?php endif; ?>
                 </a>
+                <?php endif; ?>
 
+                <?php if ($featReports): ?>
                 <div class="nav-group <?= $reportOpen ? 'open' : '' ?>" data-nav-group>
                     <button type="button" class="nav-link nav-group-toggle <?= $reportOpen ? 'active' : '' ?>" data-nav-toggle>
                         <span class="nav-link-left">
@@ -276,13 +321,17 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
                         <a href="reports.php" class="<?= $currentPage === 'reports' ? 'active' : '' ?>"><span class="dot"></span>Overview</a>
                         <a href="report-commission.php" class="<?= $currentPage === 'report-commission' ? 'active' : '' ?>"><span class="dot"></span>Commission Report</a>
                         <a href="report-joining.php" class="<?= $currentPage === 'report-joining' ? 'active' : '' ?>"><span class="dot"></span>Joining Report</a>
+                        <?php if ($featPackages): ?>
                         <a href="report-package-sales.php" class="<?= $currentPage === 'report-package-sales' ? 'active' : '' ?>"><span class="dot"></span>Package Sales</a>
+                        <?php endif; ?>
                         <a href="report-top-earners.php" class="<?= $currentPage === 'report-top-earners' ? 'active' : '' ?>"><span class="dot"></span>Top Earners</a>
+                        <?php if ($featBinaryClosing): ?>
                         <a href="report-binary-closing.php" class="<?= $currentPage === 'report-binary-closing' ? 'active' : '' ?>"><span class="dot"></span>Binary Closing</a>
+                        <?php endif; ?>
                         <a href="tds-report.php" class="<?= $currentPage === 'tds-report' ? 'active' : '' ?>"><span class="dot"></span>TDS Report</a>
-                        
                     </div>
                 </div>
+                <?php endif; ?>
 
                 <a href="settings.php" class="nav-link <?= $currentPage === 'settings' ? 'active' : '' ?>">
                     <span class="nav-link-left">
@@ -365,7 +414,7 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
                         </span>
                         <span class="user-meta">
                             <strong><?= e($adminUsername) ?></strong>
-                            <small>Administrator</small>
+                            <small>Client Admin</small>
                         </span>
                         <svg class="user-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
                     </button>

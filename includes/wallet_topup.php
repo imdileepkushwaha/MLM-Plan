@@ -117,6 +117,9 @@ function wallet_topup_submit_request(
     ?string $proofPath,
     ?string $note = null
 ): array {
+    if (!feature_enabled('feature_wallet_topup_enabled')) {
+        return ['ok' => false, 'error' => 'Wallet topup is disabled for this client.', 'id' => null];
+    }
     wallet_topup_ensure_requests_table($pdo);
 
     $amount = round($amount, 2);
@@ -292,6 +295,13 @@ function wallet_topup_reject_request(PDO $pdo, int $requestId, int $adminId, ?st
 function wallet_topup_pay_and_activate(PDO $pdo, array $payer, array $target, int $packageId): array
 {
     require_once __DIR__ . '/activation.php';
+
+    if (!feature_enabled('feature_wallet_topup_enabled')) {
+        return ['ok' => false, 'error' => 'Wallet topup activation is disabled for this client.', 'package' => null, 'mode' => null];
+    }
+    if (!feature_enabled('feature_package_enabled')) {
+        return ['ok' => false, 'error' => 'Package activation is disabled for this client.', 'package' => null, 'mode' => null];
+    }
 
     $payerId = (int) ($payer['id'] ?? 0);
     $targetId = (int) ($target['id'] ?? 0);

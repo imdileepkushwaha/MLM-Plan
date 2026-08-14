@@ -19,10 +19,13 @@ $company = setting('company_name', 'Binary MLM');
 $errors = [];
 $success = false;
 $createdCode = '';
+$useBinaryPlacement = feature_registration_uses_binary_placement();
 
 $ref = trim($_GET['ref'] ?? $_POST['sponsor_id'] ?? '');
 $pos = strtolower(trim($_GET['pos'] ?? $_POST['position'] ?? 'left'));
-if (!in_array($pos, ['left', 'right'], true)) {
+if (!$useBinaryPlacement) {
+    $pos = 'left';
+} elseif (!in_array($pos, ['left', 'right'], true)) {
     $pos = 'left';
 }
 
@@ -80,8 +83,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'Sponsor account is not active.';
     }
 
-    if (!in_array($position, ['left', 'right'], true)) {
+    if ($useBinaryPlacement && !in_array($position, ['left', 'right'], true)) {
         $errors[] = 'Select Left or Right placement.';
+    }
+    if (!$useBinaryPlacement) {
+        $position = 'left';
     }
     if ($fullName === '' || mb_strlen($fullName) < 2) {
         $errors[] = 'Full name is required.';
@@ -128,20 +134,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $placementId = null;
     if (!$errors && $sponsor) {
-        $parentId = (int) $sponsor['id'];
-        $slot = $pdo->prepare('SELECT id FROM members WHERE placement_id = ? AND position = ? LIMIT 1');
-        $slot->execute([$parentId, $position]);
-        if ($slot->fetch()) {
-            $placementId = reg_find_binary_placement($pdo, $parentId, $position);
-            if (!$placementId) {
-                $errors[] = 'Could not find a free placement slot on this side.';
+        if ($useBinaryPlacement) {
+            $parentId = (int) $sponsor['id'];
+            $slot = $pdo->prepare('SELECT id FROM members WHERE placement_id = ? AND position = ? LIMIT 1');
+            $slot->execute([$parentId, $position]);
+            if ($slot->fetch()) {
+                $placementId = reg_find_binary_placement($pdo, $parentId, $position);
+                if (!$placementId) {
+                    $errors[] = 'Could not find a free placement slot on this side.';
+                }
+            } else {
+                $placementId = $parentId;
             }
         } else {
-            $placementId = $parentId;
+            // Level-only: sponsor chain only — no binary placement legs.
+            $placementId = null;
+            $position = null;
         }
     }
 
-    if (!$errors && $sponsor && $placementId) {
+    if (!$errors && $sponsor && ($useBinaryPlacement ? $placementId : true)) {
         $memberCode = reg_unique_member_id($pdo);
         $username = reg_unique_username($pdo, $fullName);
         $hash = password_hash($password, PASSWORD_DEFAULT);
@@ -173,7 +185,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $position,
                 'active',
             ]);
-            reg_update_upline_counts($pdo, $placementId, $position);
+            if ($useBinaryPlacement && $placementId && $position) {
+                reg_update_upline_counts($pdo, $placementId, $position);
+            }
             $pdo->commit();
 
             unset($_SESSION['reg_captcha']);
@@ -280,6 +294,7 @@ $months = [
                     </div>
                 </div>
 
+                <?php if ($useBinaryPlacement): ?>
                 <div class="ureg-pos">
                     <div class="ureg-pos-head">
                         <strong>Select Position</strong>
@@ -304,6 +319,12 @@ $months = [
                         </label>
                     </div>
                 </div>
+                <?php else: ?>
+                <input type="hidden" name="position" value="left">
+                <div class="up-alert up-alert-info" style="margin-top:0.75rem">
+                    This client uses <strong>Level plan</strong> — members join under sponsor (no Left/Right binary placement).
+                </div>
+                <?php endif; ?>
             </section>
 
             <!-- 2. Personal -->

@@ -2,6 +2,8 @@
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/procedures.php';
 require_once __DIR__ . '/../includes/wallet.php';
+require_admin();
+feature_guard_admin_page('tree-view');
 $pageTitle = 'Tree View';
 
 $rootId = (int) ($_GET['root'] ?? 0);
@@ -35,6 +37,11 @@ function tv_updateUplineCounts(PDO $pdo, int $placementId, string $position): vo
 
 $formErrors = [];
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'tree_add') {
+    if (!feature_registration_uses_binary_placement()) {
+        flash('error', 'Binary tree placement is disabled for this Level-only plan.');
+        header('Location: tree-view.php');
+        exit;
+    }
     $fullName = trim($_POST['full_name'] ?? '');
     $username = trim($_POST['username'] ?? '');
     $email = trim($_POST['email'] ?? '');
@@ -120,7 +127,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'tree_
         $newId = (int) $pdo->lastInsertId();
         tv_updateUplineCounts($pdo, $placementId, $position);
 
-        if ($sponsorId && $packageId) {
+        if ($sponsorId && $packageId && feature_enabled('feature_referral_income')) {
             $pkg = $pdo->prepare('SELECT amount FROM packages WHERE id = ?');
             $pkg->execute([$packageId]);
             $amount = (float) ($pkg->fetch()['amount'] ?? 0);

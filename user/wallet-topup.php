@@ -4,6 +4,7 @@ require_once __DIR__ . '/../includes/wallet_topup.php';
 require_once __DIR__ . '/../includes/utility.php';
 require_once __DIR__ . '/includes/auth.php';
 require_user();
+feature_guard_user_page('wallet-topup');
 
 $user = current_user($pdo);
 if (!$user || ($user['status'] ?? '') === 'blocked') {

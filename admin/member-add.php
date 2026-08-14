@@ -7,6 +7,7 @@ $pageTitle = 'Add Member';
 $packages = $pdo->query("SELECT id, name, amount FROM packages WHERE status = 'active' ORDER BY amount")->fetchAll();
 $parents = $pdo->query("SELECT id, member_id, full_name FROM members WHERE status = 'active' ORDER BY id")->fetchAll();
 $errors = [];
+$useBinaryPlacement = feature_registration_uses_binary_placement();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $fullName = trim($_POST['full_name'] ?? '');
@@ -26,7 +27,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (strlen($password) < 6) $errors[] = 'Password must be at least 6 characters.';
 
     // Parent placement rules
-    if ($parentId) {
+    if (!$useBinaryPlacement) {
+        $parentId = null;
+        $position = '';
+        $autoPlace = false;
+    } elseif ($parentId) {
         if (!in_array($position, ['left', 'right'], true)) {
             $errors[] = 'Select Left or Right position under Parent.';
         }
@@ -104,7 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pkg->execute([$packageId]);
             $pkgRow = $pkg->fetch();
             if ($pkgRow) {
-                if ($sponsorId) {
+                if ($sponsorId && feature_enabled('feature_referral_income')) {
                     $amount = (float) ($pkgRow['amount'] ?? 0);
                     $pct = (float) setting('referral_commission_percent', '5');
                     $comm = round($amount * $pct / 100, 2);
@@ -254,6 +259,7 @@ require_once __DIR__ . '/../includes/header.php';
                     </select>
                     <small class="field-hint">Referrer (gets referral commission)</small>
                 </div>
+                <?php if ($useBinaryPlacement): ?>
                 <div class="form-group">
                     <label>Parent ID (Placement)</label>
                     <select name="parent_id" id="parent_id">
@@ -290,6 +296,11 @@ require_once __DIR__ . '/../includes/header.php';
                         Auto Place if position is full (next free on same leg)
                     </label>
                 </div>
+                <?php else: ?>
+                <div class="form-group" style="grid-column:1/-1">
+                    <div class="alert alert-info" style="margin:0">Level-only plan: no Left/Right binary placement. Member joins under sponsor only.</div>
+                </div>
+                <?php endif; ?>
             </div>
 
             <div class="form-actions">
@@ -305,6 +316,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const parent = document.getElementById('parent_id');
     const sponsor = document.getElementById('sponsor_id');
     const hint = document.getElementById('slotHint');
+    if (!parent || !sponsor || !hint) return;
 
     const updateHint = () => {
         const opt = parent.options[parent.selectedIndex];

@@ -3,8 +3,13 @@ require_once __DIR__ . '/../config/database.php';
 $pageTitle = 'Settings';
 
 $tab = $_GET['tab'] ?? 'general';
-$allowedTabs = ['general', 'commission', 'withdrawal', 'contact', 'security', 'activity'];
+$allowedTabs = ['general', 'withdrawal', 'contact', 'security', 'activity'];
 if (!in_array($tab, $allowedTabs, true)) {
+    if ($tab === 'commission') {
+        flash('error', 'Commission / plan rates are managed by Super Admin only.');
+        header('Location: settings.php?tab=general');
+        exit;
+    }
     $tab = 'general';
 }
 
@@ -80,26 +85,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     ];
 
     if ($postTab === 'commission') {
-        if ($postSub === 'binary') {
-            foreach (['binary_commission_percent', 'referral_commission_percent', 'matching_commission_percent', 'binary_flush_pairs', 'binary_pair_bv'] as $key) {
-                if (isset($_POST[$key])) {
-                    $saveSetting($pdo, $key, trim((string) $_POST[$key]));
-                }
-            }
-            $saveSetting($pdo, 'binary_income_enabled', isset($_POST['binary_income_enabled']) ? '1' : '0');
-        } elseif ($postSub === 'level') {
-            $levelCount = max(1, min(20, (int) ($_POST['level_income_levels'] ?? 10)));
-            $saveSetting($pdo, 'level_income_levels', (string) $levelCount);
-            $saveSetting($pdo, 'level_income_enabled', isset($_POST['level_income_enabled']) ? '1' : '0');
-            for ($i = 1; $i <= $levelCount; $i++) {
-                $key = 'level_' . $i . '_percent';
-                $val = isset($_POST[$key]) ? trim((string) $_POST[$key]) : '0';
-                if ($val === '' || !is_numeric($val)) {
-                    $val = '0';
-                }
-                $saveSetting($pdo, $key, $val);
-            }
-        }
+        flash('error', 'Commission / plan rates are managed by Super Admin only.');
+        header('Location: settings.php?tab=general');
+        exit;
     } elseif ($postTab === 'contact') {
         foreach ($keysByTab['contact'] as $key) {
             if (isset($_POST[$key])) {
@@ -221,7 +209,19 @@ if ($tab === 'contact') {
 }
 
 require_once __DIR__ . '/../includes/header.php';
+
+$planModeLabel = [
+    'hybrid' => 'Hybrid (Binary + Level)',
+    'binary' => 'Binary only',
+    'level' => 'Level only',
+][plan_mode()] ?? plan_mode();
 ?>
+
+<div class="alert alert-info">
+    <strong>Plan locked by Super Admin.</strong>
+    Mode: <?= e($planModeLabel) ?> · Preset: <?= e(setting('feature_preset', 'hybrid_full')) ?>.
+    Commission rates and module on/off are not editable here.
+</div>
 
 <div class="settings-layout">
     <aside class="settings-nav">
@@ -232,12 +232,6 @@ require_once __DIR__ . '/../includes/header.php';
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
                 </span>
                 General
-            </a>
-            <a href="settings.php?tab=commission" class="settings-nav-item <?= $tab === 'commission' ? 'active' : '' ?>">
-                <span class="sni-ico blue">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
-                </span>
-                Commission Setup
             </a>
             <a href="settings.php?tab=withdrawal" class="settings-nav-item <?= $tab === 'withdrawal' ? 'active' : '' ?>">
                 <span class="sni-ico pink">

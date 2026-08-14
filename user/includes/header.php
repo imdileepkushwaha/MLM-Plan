@@ -4,6 +4,7 @@ require_once __DIR__ . '/../../includes/kyc.php';
 require_once __DIR__ . '/../../includes/withdrawal.php';
 require_once __DIR__ . '/../../includes/activation.php';
 require_user();
+feature_guard_user_page();
 
 $user = current_user($pdo);
 if (!$user || ($user['status'] ?? '') === 'blocked') {
@@ -16,10 +17,24 @@ $company = setting('company_name', 'Binary MLM');
 $pageTitle = $pageTitle ?? 'Dashboard';
 $currentPage = basename($_SERVER['PHP_SELF'], '.php');
 $initials = user_initials($user['full_name'] ?? 'User');
-$needsActivationNav = empty($user['package_id']);
-$canUpgradeNav = !$needsActivationNav && activation_can_upgrade($pdo, $user);
-$actPendingNav = activation_pending_request($pdo, (int) $user['id']);
-$showPlanNav = $needsActivationNav || $canUpgradeNav || $actPendingNav;
+
+$featBinary = plan_uses_binary();
+$featLevel = plan_uses_level() || plan_mode() === 'level';
+$featTpin = feature_module_allowed('tpin');
+$featActivations = feature_module_allowed('activations');
+$featWalletTopup = feature_module_allowed('wallet_topup');
+$featProducts = feature_module_allowed('products');
+$featWithdrawals = feature_module_allowed('withdrawals');
+$featKyc = feature_module_allowed('kyc');
+$featIncomeBinary = feature_module_allowed('income_binary');
+$featIncomeLevel = feature_module_allowed('income_level');
+$featIncomeReferral = feature_module_allowed('income_referral');
+$featIncomeMatching = feature_module_allowed('income_matching');
+
+$needsActivationNav = $featActivations && empty($user['package_id']);
+$canUpgradeNav = $featActivations && !$needsActivationNav && activation_can_upgrade($pdo, $user);
+$actPendingNav = $featActivations ? activation_pending_request($pdo, (int) $user['id']) : null;
+$showPlanNav = $featActivations && ($needsActivationNav || $canUpgradeNav || $actPendingNav);
 $planNavIsUpgrade = !$needsActivationNav;
 $planNavLabel = $planNavIsUpgrade ? 'Upgrade' : 'Activate';
 $planNavPending = (bool) $actPendingNav;
@@ -33,10 +48,16 @@ $profileOpen = in_array($currentPage, $profilePages, true);
 $profileBadge = count($profilePages);
 $kycPages = ['kyc-pan', 'kyc-bank', 'kyc-aadhar', 'kyc-upi'];
 $kycOpen = in_array($currentPage, $kycPages, true);
-$kycIncomplete = kyc_incomplete_count($pdo, (int) $user['id']);
+$kycIncomplete = $featKyc ? kyc_incomplete_count($pdo, (int) $user['id']) : 0;
 $kycBadge = $kycIncomplete > 0 ? $kycIncomplete : count($kycPages);
 $kycBadgeAlert = $kycIncomplete > 0;
-$teamPages = ['my-direct', 'my-downline', 'my-treeview', 'level-tree'];
+$teamPages = ['my-direct', 'my-downline'];
+if ($featBinary) {
+    $teamPages[] = 'my-treeview';
+}
+if ($featLevel) {
+    $teamPages[] = 'level-tree';
+}
 $teamOpen = in_array($currentPage, $teamPages, true);
 $teamBadge = count($teamPages);
 $shopPages = ['purchase-product', 'purchase-report', 'purchase-invoice'];
@@ -44,13 +65,32 @@ $shopOpen = in_array($currentPage, $shopPages, true);
 $shopBadge = count($shopPages);
 $wdPages = ['withdrawal-fund', 'withdrawal-report'];
 $wdOpen = in_array($currentPage, $wdPages, true);
-$wdPendingBadge = wd_pending_count($pdo, (int) $user['id']);
+$wdPendingBadge = $featWithdrawals ? wd_pending_count($pdo, (int) $user['id']) : 0;
 $wdBadge = $wdPendingBadge > 0 ? $wdPendingBadge : count($wdPages);
 $wdBadgeAlert = $wdPendingBadge > 0;
-$walletPages = ['wallet', 'wallet-income', 'wallet-topup', 'wallet-shopping', 'wallet-transfer', 'wallet-topup-activate'];
+$walletPages = ['wallet', 'wallet-income', 'wallet-transfer'];
+if ($featWalletTopup) {
+    $walletPages[] = 'wallet-topup';
+    $walletPages[] = 'wallet-topup-activate';
+}
+if ($featProducts) {
+    $walletPages[] = 'wallet-shopping';
+}
 $walletOpen = in_array($currentPage, $walletPages, true);
-$walletBadge = 5;
-$incomePages = ['income-summary', 'income-binary', 'income-referral', 'income-matching', 'income-level', 'income-other'];
+$walletBadge = count($walletPages);
+$incomePages = ['income-summary', 'income-other'];
+if ($featIncomeBinary) {
+    $incomePages[] = 'income-binary';
+}
+if ($featIncomeReferral) {
+    $incomePages[] = 'income-referral';
+}
+if ($featIncomeMatching) {
+    $incomePages[] = 'income-matching';
+}
+if ($featIncomeLevel) {
+    $incomePages[] = 'income-level';
+}
 $incomeOpen = in_array($currentPage, $incomePages, true);
 $incomeBadge = count($incomePages);
 $reportPages = ['transaction-report'];
@@ -168,10 +208,12 @@ $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="
                     <?php endif; ?>
                 </a>
                 <?php endif; ?>
+                <?php if ($featTpin): ?>
                 <a href="tpin.php" class="up-nav-item<?= $isTpin ? ' is-active' : '' ?>">
                     <span class="up-nav-ico"><?= $icoTpin ?></span>
                     <span class="up-nav-text">T-Pin</span>
                 </a>
+                <?php endif; ?>
             </div>
 
             <div class="up-nav-section">
@@ -195,6 +237,7 @@ $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="
                     </div>
                 </div>
 
+                <?php if ($featKyc): ?>
                 <div class="up-nav-group<?= $kycOpen ? ' is-open' : '' ?>" data-up-nav-group>
                     <button type="button" class="up-nav-item up-nav-toggle<?= $kycOpen ? ' is-active' : '' ?>" data-up-nav-toggle aria-expanded="<?= $kycOpen ? 'true' : 'false' ?>">
                         <span class="up-nav-ico"><?= $icoKyc ?></span>
@@ -211,6 +254,7 @@ $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="
                         </div>
                     </div>
                 </div>
+                <?php endif; ?>
 
                 <div class="up-nav-group<?= $teamOpen ? ' is-open' : '' ?>" data-up-nav-group>
                     <button type="button" class="up-nav-item up-nav-toggle<?= $teamOpen ? ' is-active' : '' ?>" data-up-nav-toggle aria-expanded="<?= $teamOpen ? 'true' : 'false' ?>">
@@ -223,8 +267,12 @@ $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="
                         <div class="up-nav-sub-inner">
                             <a href="my-direct.php" class="up-nav-sublink<?= $currentPage === 'my-direct' ? ' is-active' : '' ?>">My Direct</a>
                             <a href="my-downline.php" class="up-nav-sublink<?= $currentPage === 'my-downline' ? ' is-active' : '' ?>">My Downline</a>
+                            <?php if ($featBinary): ?>
                             <a href="my-treeview.php" class="up-nav-sublink<?= $currentPage === 'my-treeview' ? ' is-active' : '' ?>">My Treeview</a>
+                            <?php endif; ?>
+                            <?php if ($featLevel): ?>
                             <a href="level-tree.php" class="up-nav-sublink<?= $currentPage === 'level-tree' ? ' is-active' : '' ?>">Level Tree</a>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>
@@ -239,10 +287,18 @@ $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="
                     <div class="up-nav-sub" id="upNavSubIncome">
                         <div class="up-nav-sub-inner">
                             <a href="income-summary.php" class="up-nav-sublink<?= $currentPage === 'income-summary' ? ' is-active' : '' ?>">Income Summary</a>
+                            <?php if ($featIncomeBinary): ?>
                             <a href="income-binary.php" class="up-nav-sublink<?= $currentPage === 'income-binary' ? ' is-active' : '' ?>">Binary Income</a>
+                            <?php endif; ?>
+                            <?php if ($featIncomeReferral): ?>
                             <a href="income-referral.php" class="up-nav-sublink<?= $currentPage === 'income-referral' ? ' is-active' : '' ?>">Referral Income</a>
+                            <?php endif; ?>
+                            <?php if ($featIncomeMatching): ?>
                             <a href="income-matching.php" class="up-nav-sublink<?= $currentPage === 'income-matching' ? ' is-active' : '' ?>">Matching Income</a>
+                            <?php endif; ?>
+                            <?php if ($featIncomeLevel): ?>
                             <a href="income-level.php" class="up-nav-sublink<?= $currentPage === 'income-level' ? ' is-active' : '' ?>">Level Income</a>
+                            <?php endif; ?>
                             <a href="income-other.php" class="up-nav-sublink<?= $currentPage === 'income-other' ? ' is-active' : '' ?>">Other Income</a>
                         </div>
                     </div>
@@ -263,15 +319,20 @@ $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="
                         <div class="up-nav-sub-inner">
                             <a href="wallet.php" class="up-nav-sublink<?= $currentPage === 'wallet' ? ' is-active' : '' ?>">Overview</a>
                             <a href="wallet-income.php" class="up-nav-sublink<?= $currentPage === 'wallet-income' ? ' is-active' : '' ?>">Income Wallet</a>
+                            <?php if ($featWalletTopup): ?>
                             <a href="wallet-topup.php" class="up-nav-sublink<?= $currentPage === 'wallet-topup' ? ' is-active' : '' ?>">Topup Wallet</a>
                             <a href="wallet-topup-activate.php" class="up-nav-sublink<?= $currentPage === 'wallet-topup-activate' ? ' is-active' : '' ?>">Activate Member</a>
+                            <?php endif; ?>
+                            <?php if ($featProducts): ?>
                             <a href="wallet-shopping.php" class="up-nav-sublink<?= $currentPage === 'wallet-shopping' ? ' is-active' : '' ?>">Shopping Wallet</a>
+                            <?php endif; ?>
                             <a href="wallet-transfer.php" class="up-nav-sublink<?= $currentPage === 'wallet-transfer' ? ' is-active' : '' ?>">Transfer</a>
                         </div>
                     </div>
                 </div>
             </div>
 
+            <?php if ($featProducts): ?>
             <div class="up-nav-section">
                 <div class="up-nav-label">Shopping</div>
                 <div class="up-nav-group<?= $shopOpen ? ' is-open' : '' ?>" data-up-nav-group>
@@ -290,7 +351,9 @@ $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="
                     </div>
                 </div>
             </div>
+            <?php endif; ?>
 
+            <?php if ($featWithdrawals): ?>
             <div class="up-nav-section">
                 <div class="up-nav-label">Withdrawal</div>
                 <div class="up-nav-group<?= $wdOpen ? ' is-open' : '' ?>" data-up-nav-group>
@@ -308,6 +371,7 @@ $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="
                     </div>
                 </div>
             </div>
+            <?php endif; ?>
 
             <div class="up-nav-section">
                 <div class="up-nav-label">Reports</div>

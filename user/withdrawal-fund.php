@@ -5,6 +5,7 @@ require_once __DIR__ . '/../includes/kyc.php';
 
 require_once __DIR__ . '/includes/auth.php';
 require_user();
+feature_guard_user_page('withdrawal-fund');
 
 $user = current_user($pdo);
 if (!$user || ($user['status'] ?? '') === 'blocked') {
@@ -40,56 +41,60 @@ if (!in_array($form['payment_method'], $allowedMethods, true)) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $amount = (float) ($_POST['amount'] ?? 0);
-    $method = trim($_POST['payment_method'] ?? '');
-    $details = trim($_POST['account_details'] ?? '');
+    if (!wd_assert_enabled()) {
+        $errors[] = 'Withdrawals are disabled for this client.';
+    } else {
+        $amount = (float) ($_POST['amount'] ?? 0);
+        $method = trim($_POST['payment_method'] ?? '');
+        $details = trim($_POST['account_details'] ?? '');
 
-    // Refresh balances under lock-ish re-read
-    $user = current_user($pdo, true) ?? $user;
-    $available = wd_available_balance($pdo, $user);
-    $wallet = (float) $user['wallet_balance'];
+        // Refresh balances under lock-ish re-read
+        $user = current_user($pdo, true) ?? $user;
+        $available = wd_available_balance($pdo, $user);
+        $wallet = (float) $user['wallet_balance'];
 
-    if ($amount <= 0) {
-        $errors[] = 'Enter a valid withdrawal amount.';
-    } elseif ($amount < $minAmt) {
-        $errors[] = 'Minimum withdrawal is ' . strip_tags(currency($minAmt)) . '.';
-    } elseif ($maxAmt > 0 && $amount > $maxAmt + 0.00001) {
-        $errors[] = 'Maximum withdrawal per request is ' . strip_tags(currency($maxAmt)) . '.';
-    } elseif ($amount > $available + 0.00001) {
-        $errors[] = 'Amount exceeds available balance (wallet minus pending requests).';
-    }
-    if ($method === '' || !in_array($method, $allowedMethods, true)) {
-        $errors[] = 'Select a valid payment method.';
-    }
-    if ($details === '' || strlen($details) < 8) {
-        $errors[] = 'Enter complete account / payout details.';
-    }
+        if ($amount <= 0) {
+            $errors[] = 'Enter a valid withdrawal amount.';
+        } elseif ($amount < $minAmt) {
+            $errors[] = 'Minimum withdrawal is ' . strip_tags(currency($minAmt)) . '.';
+        } elseif ($maxAmt > 0 && $amount > $maxAmt + 0.00001) {
+            $errors[] = 'Maximum withdrawal per request is ' . strip_tags(currency($maxAmt)) . '.';
+        } elseif ($amount > $available + 0.00001) {
+            $errors[] = 'Amount exceeds available balance (wallet minus pending requests).';
+        }
+        if ($method === '' || !in_array($method, $allowedMethods, true)) {
+            $errors[] = 'Select a valid payment method.';
+        }
+        if ($details === '' || strlen($details) < 8) {
+            $errors[] = 'Enter complete account / payout details.';
+        }
 
-    if (!$errors) {
-        wd_ensure_columns($pdo);
-        $break = wd_calc_breakdown($pdo, $amount);
-        $pdo->prepare('INSERT INTO withdrawals (member_id, amount, tds_amount, fee_amount, other_deduction, net_amount, payment_method, account_details, status) VALUES (?,?,?,?,?,?,?,?,?)')
-            ->execute([
-                $uid,
-                $break['gross'],
-                $break['tds_amount'],
-                $break['fee_amount'],
-                $break['other_deduction'],
-                $break['net_amount'],
-                $method,
-                $details,
-                'pending',
-            ]);
-        flash('success', 'Withdrawal request submitted. Net payout after deductions: ' . strip_tags(currency($break['net_amount'])) . '. Waiting for admin approval.');
-        header('Location: withdrawal-report.php');
-        exit;
-    }
+        if (!$errors) {
+            wd_ensure_columns($pdo);
+            $break = wd_calc_breakdown($pdo, $amount);
+            $pdo->prepare('INSERT INTO withdrawals (member_id, amount, tds_amount, fee_amount, other_deduction, net_amount, payment_method, account_details, status) VALUES (?,?,?,?,?,?,?,?,?)')
+                ->execute([
+                    $uid,
+                    $break['gross'],
+                    $break['tds_amount'],
+                    $break['fee_amount'],
+                    $break['other_deduction'],
+                    $break['net_amount'],
+                    $method,
+                    $details,
+                    'pending',
+                ]);
+            flash('success', 'Withdrawal request submitted. Net payout after deductions: ' . strip_tags(currency($break['net_amount'])) . '. Waiting for admin approval.');
+            header('Location: withdrawal-report.php');
+            exit;
+        }
 
-    $form = [
-        'amount' => (string) ($_POST['amount'] ?? ''),
-        'payment_method' => $method,
-        'account_details' => $details,
-    ];
+        $form = [
+            'amount' => (string) ($_POST['amount'] ?? ''),
+            'payment_method' => $method,
+            'account_details' => $details,
+        ];
+    }
 }
 
 require_once __DIR__ . '/includes/header.php';

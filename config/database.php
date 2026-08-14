@@ -67,6 +67,9 @@ function session_clear_scope(string $scope): void
     $map = [
         'user' => ['user_id', 'user_name', 'user_code', 'user_last_activity'],
         'admin' => ['admin_id', 'admin_name', 'admin_username', 'admin_last_activity'],
+        'superadmin' => [
+            'superadmin_id', 'superadmin_name', 'superadmin_username', 'superadmin_last_activity',
+        ],
         'member' => [
             'member_id', 'member_code', 'member_name',
             'member_login_by_admin', 'member_login_admin_id', 'member_last_activity',
@@ -204,6 +207,31 @@ function require_admin(): void
     session_enforce_idle('admin', 'login.php');
 }
 
+function require_superadmin(): void
+{
+    if (empty($_SESSION['superadmin_id'])) {
+        header('Location: login.php');
+        exit;
+    }
+    session_enforce_idle('superadmin', 'login.php');
+}
+
+function log_superadmin_activity(string $action, string $details = ''): void
+{
+    global $pdo;
+    try {
+        $stmt = $pdo->prepare('INSERT INTO activity_logs (admin_id, action, details, ip_address) VALUES (?, ?, ?, ?)');
+        $stmt->execute([
+            null,
+            'superadmin:' . $action,
+            $details,
+            $_SERVER['REMOTE_ADDR'] ?? null,
+        ]);
+    } catch (Throwable $e) {
+        // activity_logs may be unavailable during setup
+    }
+}
+
 function log_activity(string $action, string $details = ''): void
 {
     global $pdo;
@@ -275,4 +303,13 @@ function generate_member_id(PDO $pdo): string
 }
 
 require_once __DIR__ . '/../includes/utility.php';
+require_once __DIR__ . '/../includes/features.php';
+
+// Ensure feature defaults + super_admins when DB is ready (no-op if tables missing).
+try {
+    feature_ensure_defaults($pdo);
+    feature_ensure_superadmin_table($pdo);
+} catch (Throwable $e) {
+    // ignore during early install
+}
 

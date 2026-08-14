@@ -64,6 +64,7 @@ function mlm_expected_tables(): array
         'stock_purchases', 'stock_purchase_items', 'commodity_prices',
         'password_resets', 'member_kyc_documents', 'member_kyc_upi', 'activation_requests',
         'bv_credits', 'closing_runs', 'closing_items', 'package_products',
+        'super_admins',
     ];
 }
 
@@ -135,14 +136,23 @@ function mlm_run_schema_setup(PDO $pdo): array
             $any = $pdo->query('SELECT id FROM admins ORDER BY id ASC LIMIT 1')->fetch(PDO::FETCH_ASSOC);
             if ($any) {
                 $pdo->prepare('UPDATE admins SET username = ?, email = ?, password = ?, full_name = ?, status = ? WHERE id = ?')
-                    ->execute(['admin', 'admin@binarymlm.com', $adminHash, 'Super Admin', 'active', $any['id']]);
+                    ->execute(['admin', 'admin@binarymlm.com', $adminHash, 'Client Admin', 'active', $any['id']]);
             } else {
                 $pdo->prepare('INSERT INTO admins (username, email, password, full_name, status) VALUES (?, ?, ?, ?, ?)')
-                    ->execute(['admin', 'admin@binarymlm.com', $adminHash, 'Super Admin', 'active']);
+                    ->execute(['admin', 'admin@binarymlm.com', $adminHash, 'Client Admin', 'active']);
             }
         }
     } catch (Throwable $e) {
         // tables may still be incomplete
+    }
+
+    // Super Admin + feature defaults for this install
+    try {
+        require_once dirname(__DIR__) . '/includes/features.php';
+        feature_ensure_superadmin_table($pdo);
+        feature_ensure_defaults($pdo);
+    } catch (Throwable $e) {
+        // ignore
     }
 
     $after = mlm_schema_status($pdo);
@@ -157,7 +167,7 @@ function mlm_run_schema_setup(PDO $pdo): array
     }
 
     $msg = $after['complete']
-        ? 'Database setup complete. Login with admin / admin123'
+        ? 'Database setup complete. Client Admin: admin / admin123 · Super Admin: superadmin / superadmin123'
         : ('Setup ran, but still missing: ' . implode(', ', $after['missing']) . '. Try login admin / admin123');
 
     return [

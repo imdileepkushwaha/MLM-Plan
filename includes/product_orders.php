@@ -288,6 +288,9 @@ function product_orders_checkout(
     string $shippingAddress,
     string $note = ''
 ): array {
+    if (!feature_enabled('feature_product_shop_enabled')) {
+        return ['ok' => false, 'error' => 'Product shop is disabled for this client.', 'order_id' => null, 'invoice_no' => null];
+    }
     product_orders_ensure_tables($pdo);
     $memberId = (int) ($member['id'] ?? 0);
     if ($memberId < 1) {

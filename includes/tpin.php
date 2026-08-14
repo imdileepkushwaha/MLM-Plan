@@ -96,6 +96,9 @@ function tpin_generate(
     ?int $adminId,
     string $note = ''
 ): array {
+    if (!feature_enabled('feature_tpin_enabled')) {
+        return ['ok' => false, 'error' => 'T-PIN module is disabled for this client.', 'created' => 0, 'batch' => null, 'pins' => []];
+    }
     tpin_ensure_tables($pdo);
 
     if ($qty < 1 || $qty > 500) {
@@ -263,6 +266,9 @@ function tpin_find_member(PDO $pdo, string $login): ?array
  */
 function tpin_transfer(PDO $pdo, array $fromUser, string $pinCode, string $toLogin): array
 {
+    if (!feature_enabled('feature_tpin_enabled')) {
+        return ['ok' => false, 'error' => 'T-PIN module is disabled for this client.'];
+    }
     tpin_ensure_tables($pdo);
     $fromId = (int) ($fromUser['id'] ?? 0);
     if ($fromId <= 0) {
@@ -365,6 +371,9 @@ function tpin_find_usable(PDO $pdo, string $pinCode, int $memberId): ?array
 function tpin_redeem_for_target(PDO $pdo, array $owner, array $target, string $pinCode): array
 {
     require_once __DIR__ . '/activation.php';
+    if (!feature_enabled('feature_tpin_enabled')) {
+        return ['ok' => false, 'error' => 'T-PIN module is disabled for this client.', 'mode' => null, 'package' => null];
+    }
     tpin_ensure_tables($pdo);
 
     $ownerId = (int) ($owner['id'] ?? 0);
@@ -461,6 +470,9 @@ function tpin_redeem_for_target(PDO $pdo, array $owner, array $target, string $p
  */
 function tpin_redeem(PDO $pdo, array $user, string $pinCode, ?int $expectedPackageId = null): array
 {
+    if (!feature_enabled('feature_tpin_enabled')) {
+        return ['ok' => false, 'error' => 'T-PIN module is disabled for this client.', 'mode' => null, 'package' => null];
+    }
     tpin_ensure_tables($pdo);
 
     if (($user['status'] ?? '') === 'blocked') {

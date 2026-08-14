@@ -5,6 +5,7 @@ require_once __DIR__ . '/../includes/product_orders.php';
 require_once __DIR__ . '/../includes/wallet.php';
 
 require_user();
+feature_guard_user_page('purchase-product');
 $user = current_user($pdo);
 if (!$user || ($user['status'] ?? '') === 'blocked') {
     unset($_SESSION['user_id'], $_SESSION['user_name'], $_SESSION['user_code']);

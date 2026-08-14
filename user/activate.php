@@ -5,6 +5,7 @@ require_once __DIR__ . '/../includes/package_products.php';
 require_once __DIR__ . '/../includes/wallet_topup.php';
 require_once __DIR__ . '/includes/auth.php';
 require_user();
+feature_guard_user_page('activate');
 
 $user = current_user($pdo);
 if (!$user || ($user['status'] ?? '') === 'blocked') {
@@ -47,17 +48,25 @@ try {
 $supportEmail = setting('support_email', setting('contact_email', ''));
 $supportPhone = setting('contact_phone', '');
 
-$payMode = (string) ($_POST['pay_mode'] ?? 'utr');
-if (!in_array($payMode, ['utr', 'tpin', 'wallet'], true)) {
-    $payMode = 'utr';
+$allowedPayModes = feature_activation_pay_modes();
+if ($allowedPayModes === []) {
+    flash('error', 'No activation method is enabled. Contact support / Super Admin.');
+    header('Location: index.php');
+    exit;
+}
+
+$payMode = (string) ($_POST['pay_mode'] ?? feature_activation_default_pay_mode());
+if (!in_array($payMode, $allowedPayModes, true)) {
+    $payMode = feature_activation_default_pay_mode();
 }
 
 $topupBal = wallet_balance($pdo, (int) $user['id'], 'topup');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$pending) {
     $packageId = (int) ($_POST['package_id'] ?? 0);
-
-    if ($payMode === 'tpin') {
+    if (!in_array($payMode, $allowedPayModes, true)) {
+        $errors[] = 'Selected payment mode is not available.';
+    } elseif ($payMode === 'tpin') {
         $pinCode = (string) ($_POST['tpin_code'] ?? '');
         // Package can come from selected card; pin must match. If no package selected, pin decides.
         $expectedPkg = $packageId > 0 ? $packageId : null;
@@ -381,6 +390,7 @@ $selectedProductQty = $selectedPkg
         </div>
         <div class="actx-proof-body" style="display:block">
             <div class="actx-mode-tabs" style="display:flex;gap:0.6rem;flex-wrap:wrap;margin-bottom:1.1rem">
+                <?php if (in_array('tpin', $allowedPayModes, true)): ?>
                 <label class="actx-mode-tab" style="flex:1;min-width:160px;border:1.5px solid var(--up-border,#e5e7eb);border-radius:12px;padding:0.85rem 1rem;cursor:pointer;display:grid;gap:0.2rem">
                     <span style="display:flex;align-items:center;gap:0.5rem">
                         <input type="radio" name="pay_mode" value="tpin" <?= $payMode === 'tpin' ? 'checked' : '' ?> data-actx-mode>
@@ -388,6 +398,8 @@ $selectedProductQty = $selectedPkg
                     </span>
                     <small style="opacity:.7">Instant <?= $isUpgrade ? 'upgrade' : 'activation' ?> · no admin wait</small>
                 </label>
+                <?php endif; ?>
+                <?php if (in_array('wallet', $allowedPayModes, true)): ?>
                 <label class="actx-mode-tab" style="flex:1;min-width:160px;border:1.5px solid var(--up-border,#e5e7eb);border-radius:12px;padding:0.85rem 1rem;cursor:pointer;display:grid;gap:0.2rem">
                     <span style="display:flex;align-items:center;gap:0.5rem">
                         <input type="radio" name="pay_mode" value="wallet" <?= $payMode === 'wallet' ? 'checked' : '' ?> data-actx-mode>
@@ -395,6 +407,8 @@ $selectedProductQty = $selectedPkg
                     </span>
                     <small style="opacity:.7">Balance <?= strip_tags(currency($topupBal)) ?> · instant</small>
                 </label>
+                <?php endif; ?>
+                <?php if (in_array('utr', $allowedPayModes, true)): ?>
                 <label class="actx-mode-tab" style="flex:1;min-width:160px;border:1.5px solid var(--up-border,#e5e7eb);border-radius:12px;padding:0.85rem 1rem;cursor:pointer;display:grid;gap:0.2rem">
                     <span style="display:flex;align-items:center;gap:0.5rem">
                         <input type="radio" name="pay_mode" value="utr" <?= $payMode === 'utr' ? 'checked' : '' ?> data-actx-mode>
@@ -402,8 +416,10 @@ $selectedProductQty = $selectedPkg
                     </span>
                     <small style="opacity:.7">Bank / UPI transfer · admin approval</small>
                 </label>
+                <?php endif; ?>
             </div>
 
+            <?php if (in_array('wallet', $allowedPayModes, true)): ?>
             <div id="actxWalletPanel" <?= $payMode === 'wallet' ? '' : 'hidden' ?>>
                 <div class="up-alert up-alert-info" style="margin-bottom:0.85rem">
                     Payable amount will be deducted from your <strong>Topup Wallet</strong> instantly.
@@ -413,7 +429,9 @@ $selectedProductQty = $selectedPkg
                     <?php endif; ?>
                 </div>
             </div>
+            <?php endif; ?>
 
+            <?php if (in_array('tpin', $allowedPayModes, true)): ?>
             <div id="actxTpinPanel" <?= $payMode === 'tpin' ? '' : 'hidden' ?>>
                 <div class="up-field" style="max-width:420px">
                     <label for="tpin_code">Enter T-Pin *</label>
@@ -435,9 +453,11 @@ $selectedProductQty = $selectedPkg
                     <small style="display:block;margin-top:0.4rem;opacity:.7">Pin package must match the selected plan. Unused company-stock pins also work if you have the code.</small>
                 </div>
             </div>
+            <?php endif; ?>
         </div>
     </section>
 
+    <?php if (in_array('utr', $allowedPayModes, true)): ?>
     <div id="actxUtrPanel" <?= $payMode === 'utr' ? '' : 'hidden' ?>>
     <?php if ($payBanks): ?>
     <section class="actx-pay-panel actx-bank-panel" id="actxBankPanel">
@@ -626,6 +646,7 @@ $selectedProductQty = $selectedPkg
         </div>
     </section>
     </div>
+    <?php endif; ?>
 
     <div class="actx-bar">
         <div class="actx-bar-summary">

@@ -153,6 +153,9 @@ function closing_push_bv_upline(PDO $pdo, int $memberId, float $bv): void
  */
 function closing_credit_bv_upline(PDO $pdo, int $memberId, float $bv, ?int $packageId = null): bool
 {
+    if (!plan_uses_binary()) {
+        return false;
+    }
     closing_ensure_tables($pdo);
     $bv = round($bv, 2);
     if ($memberId <= 0 || $bv <= 0) {
@@ -177,6 +180,9 @@ function closing_credit_bv_upline(PDO $pdo, int $memberId, float $bv, ?int $pack
  */
 function closing_credit_bv_delta(PDO $pdo, int $memberId, float $deltaBv, ?int $packageId = null): bool
 {
+    if (!plan_uses_binary()) {
+        return false;
+    }
     closing_ensure_tables($pdo);
     $deltaBv = round($deltaBv, 2);
     if ($memberId <= 0 || $deltaBv <= 0) {
@@ -206,6 +212,9 @@ function closing_credit_bv_delta(PDO $pdo, int $memberId, float $deltaBv, ?int $
 function closing_pay_level_income(PDO $pdo, int $fromMemberId, string $memberCode, float $packageAmount, ?string $eventKey = null): float
 {
     if ($fromMemberId <= 0 || $packageAmount <= 0) {
+        return 0.0;
+    }
+    if (!plan_uses_level()) {
         return 0.0;
     }
     if (setting('level_income_enabled', '1') !== '1') {
@@ -284,10 +293,10 @@ function closing_on_activation(PDO $pdo, array $user, array $pkg): void
     $code = (string) ($user['member_id'] ?? '');
     $packageId = isset($pkg['id']) ? (int) $pkg['id'] : null;
 
-    if ($bv > 0) {
+    if ($bv > 0 && plan_uses_binary()) {
         closing_credit_bv_upline($pdo, $uid, $bv, $packageId);
     }
-    if ($amount > 0) {
+    if ($amount > 0 && plan_uses_level()) {
         closing_pay_level_income($pdo, $uid, $code, $amount);
     }
 }
@@ -308,10 +317,10 @@ function closing_on_upgrade(PDO $pdo, array $user, array $oldPkg, array $newPkg,
     $code = (string) ($user['member_id'] ?? '');
     $packageId = isset($newPkg['id']) ? (int) $newPkg['id'] : null;
 
-    if ($deltaBv > 0) {
+    if ($deltaBv > 0 && plan_uses_binary()) {
         closing_credit_bv_delta($pdo, $uid, $deltaBv, $packageId);
     }
-    if ($deltaAmount > 0) {
+    if ($deltaAmount > 0 && plan_uses_level()) {
         $key = $eventKey !== null && $eventKey !== '' ? $eventKey : ('upgrade:' . $uid . ':' . ($packageId ?? 0));
         closing_pay_level_income($pdo, $uid, $code, $deltaAmount, $key);
     }
@@ -324,6 +333,9 @@ function closing_on_upgrade(PDO $pdo, array $user, array $oldPkg, array $newPkg,
  */
 function closing_rebuild_bv(PDO $pdo): array
 {
+    if (!plan_uses_binary()) {
+        return ['ok' => false, 'message' => 'Binary BV rebuild is disabled for this client plan.', 'members' => 0];
+    }
     closing_ensure_tables($pdo);
 
     try {
@@ -432,13 +444,15 @@ function closing_run_binary(PDO $pdo, ?int $adminId = null, bool $commit = true)
         ];
     };
 
-    if (setting('binary_income_enabled', '1') !== '1') {
-        return $empty('Binary income is disabled in settings.');
+    if (!plan_uses_binary() || setting('binary_income_enabled', '1') !== '1') {
+        return $empty('Binary income is disabled for this client plan.');
     }
 
     $pairBv = closing_pair_bv();
     $binaryPct = (float) setting('binary_commission_percent', '10');
-    $matchingPct = (float) setting('matching_commission_percent', '0');
+    $matchingPct = feature_enabled('feature_matching_income')
+        ? (float) setting('matching_commission_percent', '0')
+        : 0.0;
     $flushPairs = max(0, (int) setting('binary_flush_pairs', '0'));
     $adminChargePct = max(0.0, (float) setting('daily_closing_admin_charge', '0'));
 

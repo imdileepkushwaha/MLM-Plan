@@ -1,6 +1,8 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/closing.php';
+require_admin();
+feature_guard_admin_page('binary-closing');
 
 $pageTitle = 'Binary Closing';
 closing_ensure_tables($pdo);
@@ -99,7 +101,7 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
         </div>
         <div class="rpt-hero-actions">
-            <a class="btn btn-outline btn-sm" href="settings.php?tab=commission&sub=binary">Commission settings</a>
+            <a class="btn btn-outline btn-sm" href="../superadmin/commission.php?sub=binary">Commission rates (Super Admin)</a>
         </div>
     </header>
 

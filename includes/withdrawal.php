@@ -3,6 +3,11 @@
  * User withdrawal helpers
  */
 
+function wd_assert_enabled(): bool
+{
+    return feature_enabled('feature_withdrawals_enabled');
+}
+
 function wd_ensure_columns(PDO $pdo): void
 {
     static $done = false;

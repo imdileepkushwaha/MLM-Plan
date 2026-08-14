@@ -17,6 +17,9 @@ function activation_packages(PDO $pdo): array
 
 function activation_pay_referral(PDO $pdo, int $sponsorId, int $fromMemberId, string $memberCode, float $packageAmount): void
 {
+    if (!feature_enabled('feature_referral_income')) {
+        return;
+    }
     if ($sponsorId <= 0 || $packageAmount <= 0) {
         return;
     }
@@ -39,6 +42,9 @@ function activation_pay_referral(PDO $pdo, int $sponsorId, int $fromMemberId, st
  */
 function activation_apply(PDO $pdo, array $user, int $packageId): array
 {
+    if (!feature_enabled('feature_package_enabled') && !feature_enabled('feature_tpin_enabled')) {
+        return ['ok' => false, 'error' => 'Package activation is disabled for this client.'];
+    }
     if (!empty($user['package_id'])) {
         return ['ok' => false, 'error' => 'Your account is already activated.'];
     }
@@ -56,8 +62,11 @@ function activation_apply(PDO $pdo, array $user, int $packageId): array
     $uid = (int) $user['id'];
     closing_ensure_tables($pdo);
 
-    // Prefer stored procedure (atomic activation + referral)
-    $sp = sp_call_activate_member($pdo, $uid, $packageId);
+    // Prefer stored procedure only when referral income is enabled (SP always pays referral).
+    $sp = ['message' => 'Procedure unavailable', 'ok' => false];
+    if (feature_enabled('feature_referral_income')) {
+        $sp = sp_call_activate_member($pdo, $uid, $packageId);
+    }
     if ($sp['message'] !== 'Procedure unavailable') {
         if ($sp['ok']) {
             try {
@@ -308,6 +317,12 @@ function activation_submit_request(
     string $note = '',
     ?string $slipPath = null
 ): array {
+    if (!feature_enabled('feature_utr_activation_enabled')) {
+        return ['ok' => false, 'error' => 'UTR activation is disabled for this client.', 'request_id' => null];
+    }
+    if (!feature_enabled('feature_package_enabled')) {
+        return ['ok' => false, 'error' => 'Package activation is disabled for this client.', 'request_id' => null];
+    }
     activation_ensure_requests_table($pdo);
 
     if (!empty($user['package_id'])) {
@@ -367,6 +382,12 @@ function activation_submit_upgrade_request(
     string $note = '',
     ?string $slipPath = null
 ): array {
+    if (!feature_enabled('feature_utr_activation_enabled')) {
+        return ['ok' => false, 'error' => 'UTR activation is disabled for this client.', 'request_id' => null];
+    }
+    if (!feature_enabled('feature_package_enabled')) {
+        return ['ok' => false, 'error' => 'Package activation is disabled for this client.', 'request_id' => null];
+    }
     activation_ensure_requests_table($pdo);
 
     if (empty($user['package_id'])) {
@@ -433,6 +454,9 @@ function activation_submit_upgrade_request(
  */
 function activation_apply_upgrade(PDO $pdo, array $user, int $newPackageId, ?int $requestId = null): array
 {
+    if (!feature_enabled('feature_package_enabled') && !feature_enabled('feature_tpin_enabled')) {
+        return ['ok' => false, 'error' => 'Package upgrade is disabled for this client.', 'package' => null, 'diff' => 0.0];
+    }
     if (empty($user['package_id'])) {
         return ['ok' => false, 'error' => 'Member is not activated yet.', 'package' => null, 'diff' => 0.0];
     }
