@@ -2,6 +2,12 @@
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/../includes/registration.php';
 
+if (!client_license_ok()) {
+    flash('error', client_license_message() ?: 'Registration is unavailable.');
+    header('Location: login.php');
+    exit;
+}
+
 if (is_maintenance_mode()) {
     flash('error', 'Portal is under maintenance. Registration is temporarily disabled.');
     header('Location: login.php');
@@ -20,12 +26,16 @@ $errors = [];
 $success = false;
 $createdCode = '';
 $useBinaryPlacement = feature_registration_uses_binary_placement();
+$useMatrixPlacement = feature_registration_uses_matrix_placement();
+$matrixWidth = matrix_width();
 
 $ref = trim($_GET['ref'] ?? $_POST['sponsor_id'] ?? '');
 $pos = strtolower(trim($_GET['pos'] ?? $_POST['position'] ?? 'left'));
-if (!$useBinaryPlacement) {
-    $pos = 'left';
-} elseif (!in_array($pos, ['left', 'right'], true)) {
+if ($useBinaryPlacement) {
+    if (!in_array($pos, ['left', 'right'], true)) {
+        $pos = 'left';
+    }
+} else {
     $pos = 'left';
 }
 
@@ -79,15 +89,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $sponsor = reg_lookup_sponsor($pdo, $sponsorCode);
     if (!$sponsor) {
         $errors[] = 'Enter a valid Sponsor ID.';
-    } elseif (($sponsor['status'] ?? '') !== 'active') {
-        $errors[] = 'Sponsor account is not active.';
+    } elseif (!reg_sponsor_is_active($sponsor)) {
+        $errors[] = 'Sponsor account is not activated yet.';
     }
 
     if ($useBinaryPlacement && !in_array($position, ['left', 'right'], true)) {
         $errors[] = 'Select Left or Right placement.';
     }
     if (!$useBinaryPlacement) {
-        $position = 'left';
+        $position = null;
     }
     if ($fullName === '' || mb_strlen($fullName) < 2) {
         $errors[] = 'Full name is required.';
@@ -132,6 +142,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    if (!$errors && reg_phone_exists($pdo, $phone)) {
+        $errors[] = 'This mobile number is already registered.';
+    }
+
     $placementId = null;
     if (!$errors && $sponsor) {
         if ($useBinaryPlacement) {
@@ -146,14 +160,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $placementId = $parentId;
             }
+        } elseif ($useMatrixPlacement) {
+            members_ensure_flexible_position($pdo);
+            $found = reg_find_matrix_placement($pdo, (int) $sponsor['id'], $matrixWidth);
+            if (!$found) {
+                $errors[] = 'Could not find a free matrix slot under this sponsor.';
+            } else {
+                $placementId = (int) $found['placement_id'];
+                $position = (string) $found['position'];
+            }
         } else {
-            // Level-only: sponsor chain only — no binary placement legs.
+            // Level / Unilevel: sponsor chain only — no tree placement legs.
             $placementId = null;
             $position = null;
         }
     }
 
-    if (!$errors && $sponsor && ($useBinaryPlacement ? $placementId : true)) {
+    if (!$errors && $sponsor && (($useBinaryPlacement || $useMatrixPlacement) ? $placementId : true)) {
         $memberCode = reg_unique_member_id($pdo);
         $username = reg_unique_username($pdo, $fullName);
         $hash = password_hash($password, PASSWORD_DEFAULT);
@@ -183,7 +206,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 (int) $sponsor['id'],
                 $placementId,
                 $position,
-                'active',
+                'inactive',
             ]);
             if ($useBinaryPlacement && $placementId && $position) {
                 reg_update_upline_counts($pdo, $placementId, $position);
@@ -319,10 +342,15 @@ $months = [
                         </label>
                     </div>
                 </div>
+                <?php elseif ($useMatrixPlacement): ?>
+                <input type="hidden" name="position" value="auto">
+                <div class="up-alert up-alert-info" style="margin-top:0.75rem">
+                    Placement is auto-assigned by spillover under your sponsor (Matrix <?= (int) $matrixWidth ?>×).
+                </div>
                 <?php else: ?>
                 <input type="hidden" name="position" value="left">
                 <div class="up-alert up-alert-info" style="margin-top:0.75rem">
-                    This client uses <strong>Level plan</strong> — members join under sponsor (no Left/Right binary placement).
+                    You will join under your sponsor (no Left/Right placement).
                 </div>
                 <?php endif; ?>
             </section>
@@ -481,12 +509,36 @@ $months = [
     </main>
 </div>
 
-<dialog class="ureg-dialog" id="uregContract">
-    <form method="dialog" class="ureg-dialog-inner">
-        <h3>E-Contract</h3>
-        <p>By creating an account you agree to follow company policies, maintain accurate profile and KYC details, and understand that commissions and withdrawals are subject to plan rules and admin approval.</p>
-        <button type="submit" class="ulog-submit">Close</button>
-    </form>
+<dialog class="ureg-dialog" id="uregContract" aria-labelledby="uregContractTitle">
+    <div class="ureg-dialog-panel">
+        <header class="ureg-dialog-head">
+            <div class="ureg-dialog-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            </div>
+            <div>
+                <p class="ureg-dialog-kicker">Member agreement</p>
+                <h3 id="uregContractTitle">E-Contract</h3>
+            </div>
+            <button type="button" class="ureg-dialog-x" id="uregContractClose" aria-label="Close">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+        </header>
+        <div class="ureg-dialog-body">
+            <p>By creating an account with <strong><?= e($company) ?></strong>, you confirm that:</p>
+            <ul>
+                <li>You will follow company policies and the compensation plan rules.</li>
+                <li>Your profile, KYC and bank details will be kept accurate and up to date.</li>
+                <li>Commissions, bonuses and withdrawals are subject to plan settings and admin approval.</li>
+                <li>You will not misuse the platform, referral links, or payment systems.</li>
+                <li>Accounts found in violation may be suspended or blocked without notice.</li>
+            </ul>
+            <p class="ureg-dialog-note">This electronic agreement is binding upon successful registration.</p>
+        </div>
+        <footer class="ureg-dialog-foot">
+            <button type="button" class="ureg-dialog-btn ghost" id="uregContractDismiss">Close</button>
+            <button type="button" class="ureg-dialog-btn primary" id="uregContractAccept">I Agree</button>
+        </footer>
+    </div>
 </dialog>
 
 <script src="assets/js/user.js?v=<?= (int) @filemtime(__DIR__ . '/assets/js/user.js') ?>"></script>
@@ -539,10 +591,33 @@ $months = [
 
     const dlg = document.getElementById('uregContract');
     const link = document.getElementById('uregContractLink');
+    const agreeBox = document.querySelector('input[name="agree"]');
+    const closeBtn = document.getElementById('uregContractClose');
+    const dismissBtn = document.getElementById('uregContractDismiss');
+    const acceptBtn = document.getElementById('uregContractAccept');
+
+    function openContract(e) {
+        if (e) e.preventDefault();
+        if (dlg && typeof dlg.showModal === 'function') dlg.showModal();
+    }
+    function closeContract() {
+        if (dlg && dlg.open) dlg.close();
+    }
+
     if (dlg && link) {
-        link.addEventListener('click', (e) => {
-            e.preventDefault();
-            if (typeof dlg.showModal === 'function') dlg.showModal();
+        link.addEventListener('click', openContract);
+    }
+    if (closeBtn) closeBtn.addEventListener('click', closeContract);
+    if (dismissBtn) dismissBtn.addEventListener('click', closeContract);
+    if (acceptBtn) {
+        acceptBtn.addEventListener('click', () => {
+            if (agreeBox) agreeBox.checked = true;
+            closeContract();
+        });
+    }
+    if (dlg) {
+        dlg.addEventListener('click', (e) => {
+            if (e.target === dlg) closeContract();
         });
     }
 

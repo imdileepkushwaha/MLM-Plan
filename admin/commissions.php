@@ -3,6 +3,21 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/wallet.php';
 $pageTitle = 'Commissions';
 
+$manualTypes = ['other'];
+if (feature_enabled('feature_binary_income') && plan_uses_binary()) {
+    $manualTypes[] = 'binary';
+}
+if (feature_enabled('feature_referral_income')) {
+    $manualTypes[] = 'referral';
+}
+if (feature_enabled('feature_matching_income') && plan_uses_binary()) {
+    $manualTypes[] = 'matching';
+}
+if (feature_enabled('feature_level_income') && plan_uses_level()) {
+    $manualTypes[] = 'level';
+}
+$filterTypes = $manualTypes;
+
 // Manual commission add
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add') {
     $memberId = (int) ($_POST['member_id'] ?? 0);
@@ -11,7 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add')
     $description = trim($_POST['description'] ?? '');
     $creditWallet = isset($_POST['credit_wallet']);
 
-    if ($memberId && $amount > 0 && in_array($type, ['binary', 'referral', 'matching', 'level', 'other'], true)) {
+    if ($memberId && $amount > 0 && in_array($type, $manualTypes, true)) {
         $status = $creditWallet ? 'paid' : 'pending';
         $pdo->prepare('INSERT INTO commissions (member_id, type, amount, description, status) VALUES (?,?,?,?,?)')
             ->execute([$memberId, $type, $amount, $description, $status]);
@@ -89,7 +104,7 @@ $offset = ($page - 1) * $perPage;
 
 $where = ['1=1'];
 $params = [];
-if (in_array($typeFilter, ['binary', 'referral', 'matching', 'level', 'other'], true)) {
+if (in_array($typeFilter, $filterTypes, true)) {
     $where[] = 'c.type = ?';
     $params[] = $typeFilter;
 }
@@ -145,7 +160,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="form-group">
                     <label>Type</label>
                     <select name="type">
-                        <?php foreach (['binary','referral','matching','level','other'] as $t): ?>
+                        <?php foreach ($manualTypes as $t): ?>
                         <option value="<?= $t ?>"><?= ucfirst($t) ?></option>
                         <?php endforeach; ?>
                     </select>
@@ -177,7 +192,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <label>Type</label>
                 <select name="type">
                     <option value="">All</option>
-                    <?php foreach (['binary','referral','matching','level','other'] as $t): ?>
+                    <?php foreach ($filterTypes as $t): ?>
                     <option value="<?= $t ?>" <?= $typeFilter === $t ? 'selected' : '' ?>><?= ucfirst($t) ?></option>
                     <?php endforeach; ?>
                 </select>

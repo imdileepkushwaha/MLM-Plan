@@ -3,7 +3,8 @@
  * User income / commission report helpers
  */
 
-function income_types(): array
+/** Full catalog of income types (for historical filters / meta lookup). */
+function income_types_catalog(): array
 {
     return [
         'binary' => [
@@ -54,10 +55,35 @@ function income_types(): array
     ];
 }
 
+/** Enabled income types for the current plan / feature flags (+ always other). */
+function income_types(): array
+{
+    $all = income_types_catalog();
+    $out = [];
+    if (feature_enabled('feature_binary_income') && plan_uses_binary()) {
+        $out['binary'] = $all['binary'];
+    }
+    if (feature_enabled('feature_referral_income')) {
+        $out['referral'] = $all['referral'];
+    }
+    if (feature_enabled('feature_matching_income') && plan_uses_binary()) {
+        $out['matching'] = $all['matching'];
+    }
+    if (feature_enabled('feature_level_income') && plan_uses_level()) {
+        $out['level'] = $all['level'];
+    }
+    $out['other'] = $all['other'];
+    return $out;
+}
+
 function income_type_meta(string $type): ?array
 {
     $types = income_types();
-    return $types[$type] ?? null;
+    if (isset($types[$type])) {
+        return $types[$type];
+    }
+    $catalog = income_types_catalog();
+    return $catalog[$type] ?? null;
 }
 
 /** SVG icon markup for income type / banner (stroke icons). */

@@ -14,9 +14,9 @@ if ($isLocal) {
     define('DB_PASS', '');
 } else {
     define('DB_HOST', 'localhost');
-    define('DB_NAME', 'binarymlm_db');
-    define('DB_USER', 'binarymlm_db');
-    define('DB_PASS', '9Vltyp*iuF2K_eo7');
+    define('DB_NAME', 'mlmplan_db');
+    define('DB_USER', 'mlmplan_db');
+    define('DB_PASS', 'Tf&pW4vhzxMf2%6j');
 }
 define('DB_CHARSET', 'utf8mb4');
 
@@ -204,6 +204,12 @@ function require_admin(): void
         header('Location: login.php');
         exit;
     }
+    if (!client_license_ok()) {
+        session_clear_scope('admin');
+        flash('error', client_license_message() ?: 'Access is temporarily unavailable. Please contact support.');
+        header('Location: login.php');
+        exit;
+    }
     session_enforce_idle('admin', 'login.php');
 }
 
@@ -304,6 +310,7 @@ function generate_member_id(PDO $pdo): string
 
 require_once __DIR__ . '/../includes/utility.php';
 require_once __DIR__ . '/../includes/features.php';
+require_once __DIR__ . '/../includes/matrix.php';
 
 // Ensure feature defaults + super_admins when DB is ready (no-op if tables missing).
 try {

@@ -20,9 +20,10 @@ $shopBal = wallet_balance($pdo, $uid, 'shopping');
 <div class="up-page-head">
     <div>
         <h1>Purchase Report</h1>
-        <p>History of your product orders paid from Shopping Wallet.</p>
+        <p>History of your product orders — payment, shipping &amp; delivery status.</p>
     </div>
     <div class="team-head-actions">
+        <a href="purchase-tracking.php" class="up-btn up-btn-outline">Purchase Tracking</a>
         <a href="purchase-invoice.php" class="up-btn up-btn-outline">Invoices</a>
         <a href="purchase-product.php" class="up-btn up-btn-primary">Purchase Product</a>
     </div>
@@ -46,7 +47,7 @@ $shopBal = wallet_balance($pdo, $uid, 'shopping');
     <article class="shop-stat g-orange">
         <span class="shop-stat-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 12h8M12 8v8"/></svg></span>
         <div>
-            <span class="shop-stat-label">Total BV</span>
+            <span class="shop-stat-label">Total PV</span>
             <strong><?= number_format((float) $stats['paid_bv'], 0) ?></strong>
         </div>
     </article>
@@ -82,24 +83,33 @@ $shopBal = wallet_balance($pdo, $uid, 'shopping');
                 <th>Invoice</th>
                 <th>Date</th>
                 <th>Amount</th>
-                <th>BV</th>
-                <th>Status</th>
+                <th>PV</th>
+                <th>Payment</th>
+                <th>Delivery</th>
                 <th>Ship to</th>
                 <th></th>
             </tr>
             </thead>
             <tbody>
             <?php if (!$rows): ?>
-                <tr><td colspan="7" class="shop-td-empty">No purchases yet. <a href="purchase-product.php">Buy products</a></td></tr>
+                <tr><td colspan="8" class="shop-td-empty">No purchases yet. <a href="purchase-product.php">Buy products</a></td></tr>
             <?php else: ?>
-                <?php foreach ($rows as $r): ?>
+                <?php foreach ($rows as $r):
+                    $ds = (string) ($r['delivery_status'] ?? 'pending');
+                ?>
                     <tr>
                         <td><code class="shop-inv"><?= e($r['invoice_no']) ?></code></td>
                         <td><?= !empty($r['created_at']) ? e(date('d M Y H:i', strtotime((string) $r['created_at']))) : '—' ?></td>
                         <td><strong><?= currency((float) $r['total_amount']) ?></strong></td>
                         <td><?= number_format((float) $r['total_bv'], 2) ?></td>
                         <td><span class="shop-pill is-<?= e($r['status']) ?>"><?= e(ucfirst((string) $r['status'])) ?></span></td>
-                        <td><?= e($r['shipping_name'] ?? '—') ?></td>
+                        <td><span class="shop-pill is-del-<?= e($ds) ?>"><?= e(product_delivery_label($ds)) ?></span></td>
+                        <td>
+                            <?= e($r['shipping_name'] ?? '—') ?>
+                            <?php if (!empty($r['shipping_city'])): ?>
+                                <br><small><?= e((string) $r['shipping_city']) ?></small>
+                            <?php endif; ?>
+                        </td>
                         <td class="shop-td-actions">
                             <a href="purchase-invoice.php?id=<?= (int) $r['id'] ?>" class="up-btn up-btn-outline up-btn-sm">Invoice</a>
                         </td>

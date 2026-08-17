@@ -6,11 +6,15 @@ require_once __DIR__ . '/includes/header.php';
 wallet_ensure_schema($pdo);
 $uid = (int) $user['id'];
 $balances = wallet_get_balances($pdo, $uid);
-$types = wallet_types();
-$totalAll = $balances['income'] + $balances['topup'] + $balances['shopping'];
+$types = wallet_types_enabled();
+$totalAll = 0.0;
+foreach (array_keys($types) as $wk) {
+    $totalAll += (float) ($balances[$wk] ?? 0);
+}
 $recent = wallet_ledger_rows($pdo, $uid, null, 8);
 $transfers = wallet_transfer_rows($pdo, $uid, 5);
 $incomeAvail = wallet_income_available($pdo, $user);
+$showWithdrawUi = feature_module_allowed('withdrawals');
 
 $cardIco = [
     'income' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>',
@@ -22,11 +26,13 @@ $toneGrad = ['green' => 'g-green', 'blue' => 'g-blue', 'purple' => 'g-purple'];
 <div class="up-page-head">
     <div>
         <h1>My Wallets</h1>
-        <p>Manage Income, Topup and Shopping wallets — transfer funds and track ledger.</p>
+        <p>Manage your wallet balances — transfer funds and track ledger.</p>
     </div>
     <div class="up-head-actions">
         <a href="wallet-transfer.php" class="up-btn up-btn-primary">Transfer</a>
+        <?php if ($showWithdrawUi): ?>
         <a href="withdrawal-fund.php" class="up-btn up-btn-outline">Withdraw</a>
+        <?php endif; ?>
     </div>
 </div>
 

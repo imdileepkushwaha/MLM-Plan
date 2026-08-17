@@ -14,15 +14,19 @@ if (!$user || ($user['status'] ?? '') === 'blocked') {
 }
 
 $company = setting('company_name', 'Binary MLM');
+$logoUrl = company_logo_url();
+$favUrl = company_favicon_url();
 $pageTitle = $pageTitle ?? 'Dashboard';
 $currentPage = basename($_SERVER['PHP_SELF'], '.php');
 $initials = user_initials($user['full_name'] ?? 'User');
 
 $featBinary = plan_uses_binary();
-$featLevel = plan_uses_level() || plan_mode() === 'level';
+$featMatrix = plan_uses_matrix();
+$featLevel = plan_uses_level() || plan_mode() === 'level' || plan_mode() === 'unilevel';
 $featTpin = feature_module_allowed('tpin');
 $featActivations = feature_module_allowed('activations');
 $featWalletTopup = feature_module_allowed('wallet_topup');
+$featWalletActivate = feature_module_allowed('wallet_activate');
 $featProducts = feature_module_allowed('products');
 $featWithdrawals = feature_module_allowed('withdrawals');
 $featKyc = feature_module_allowed('kyc');
@@ -30,8 +34,11 @@ $featIncomeBinary = feature_module_allowed('income_binary');
 $featIncomeLevel = feature_module_allowed('income_level');
 $featIncomeReferral = feature_module_allowed('income_referral');
 $featIncomeMatching = feature_module_allowed('income_matching');
+$productActivatesNav = feature_enabled('feature_product_activates_package');
+$productMinActivate = product_activate_min_amount();
 
 $needsActivationNav = $featActivations && empty($user['package_id']);
+$needsShopActivationNav = !$featActivations && $productActivatesNav && $featProducts && empty($user['package_id']);
 $canUpgradeNav = $featActivations && !$needsActivationNav && activation_can_upgrade($pdo, $user);
 $actPendingNav = $featActivations ? activation_pending_request($pdo, (int) $user['id']) : null;
 $showPlanNav = $featActivations && ($needsActivationNav || $canUpgradeNav || $actPendingNav);
@@ -55,12 +62,15 @@ $teamPages = ['my-direct', 'my-downline'];
 if ($featBinary) {
     $teamPages[] = 'my-treeview';
 }
+if ($featMatrix) {
+    $teamPages[] = 'matrix-tree';
+}
 if ($featLevel) {
     $teamPages[] = 'level-tree';
 }
 $teamOpen = in_array($currentPage, $teamPages, true);
 $teamBadge = count($teamPages);
-$shopPages = ['purchase-product', 'purchase-report', 'purchase-invoice'];
+$shopPages = ['purchase-product', 'purchase-cart', 'purchase-checkout', 'purchase-report', 'purchase-tracking', 'purchase-invoice'];
 $shopOpen = in_array($currentPage, $shopPages, true);
 $shopBadge = count($shopPages);
 $wdPages = ['withdrawal-fund', 'withdrawal-report'];
@@ -71,6 +81,8 @@ $wdBadgeAlert = $wdPendingBadge > 0;
 $walletPages = ['wallet', 'wallet-income', 'wallet-transfer'];
 if ($featWalletTopup) {
     $walletPages[] = 'wallet-topup';
+}
+if ($featWalletActivate) {
     $walletPages[] = 'wallet-topup-activate';
 }
 if ($featProducts) {
@@ -114,6 +126,16 @@ if ($needsActivationNav) {
             'tone' => 'red',
         ];
     }
+} elseif ($needsShopActivationNav) {
+    $minHint = $productMinActivate > 0
+        ? 'Buy a product of at least ' . strip_tags(currency($productMinActivate))
+        : 'Buy an eligible product from the shop';
+    $userNotifyItems[] = [
+        'href' => 'purchase-product.php',
+        'title' => 'Activate via product purchase',
+        'small' => $minHint,
+        'tone' => 'red',
+    ];
 } elseif ($actPendingNav && (($actPendingNav['request_type'] ?? '') === 'upgrade')) {
     $userNotifyItems[] = [
         'href' => 'activate.php',
@@ -178,18 +200,23 @@ $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= e($pageTitle) ?> | User Panel</title>
+    <title><?= e($pageTitle) ?> | <?= e($company) ?></title>
+    <?php if ($favUrl): ?><link rel="icon" href="<?= e($favUrl) ?>"><?php endif; ?>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/css/user.css?v=<?= (int) @filemtime(__DIR__ . '/../assets/css/user.css') ?>">
 </head>
 <body class="up-body<?= !empty($bodyClass) ? ' ' . e($bodyClass) : '' ?>">
 <div class="up-app">
     <aside class="up-sidebar" id="upSidebar">
-        <div class="up-brand">
+        <div class="up-brand<?= $logoUrl ? ' has-logo' : '' ?>">
+            <?php if ($logoUrl): ?>
+            <img class="up-brand-logo" src="<?= e($logoUrl) ?>" alt="<?= e($company) ?>">
+            <?php else: ?>
             <span class="up-brand-ico" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
             </span>
-            <div class="up-brand-text">User <span>Panel</span></div>
+            <div class="up-brand-text"><?= e($company) ?></div>
+            <?php endif; ?>
         </div>
 
         <nav class="up-nav">
@@ -270,6 +297,9 @@ $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="
                             <?php if ($featBinary): ?>
                             <a href="my-treeview.php" class="up-nav-sublink<?= $currentPage === 'my-treeview' ? ' is-active' : '' ?>">My Treeview</a>
                             <?php endif; ?>
+                            <?php if ($featMatrix): ?>
+                            <a href="matrix-tree.php" class="up-nav-sublink<?= $currentPage === 'matrix-tree' ? ' is-active' : '' ?>">Matrix Tree</a>
+                            <?php endif; ?>
                             <?php if ($featLevel): ?>
                             <a href="level-tree.php" class="up-nav-sublink<?= $currentPage === 'level-tree' ? ' is-active' : '' ?>">Level Tree</a>
                             <?php endif; ?>
@@ -321,6 +351,8 @@ $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="
                             <a href="wallet-income.php" class="up-nav-sublink<?= $currentPage === 'wallet-income' ? ' is-active' : '' ?>">Income Wallet</a>
                             <?php if ($featWalletTopup): ?>
                             <a href="wallet-topup.php" class="up-nav-sublink<?= $currentPage === 'wallet-topup' ? ' is-active' : '' ?>">Topup Wallet</a>
+                            <?php endif; ?>
+                            <?php if ($featWalletActivate): ?>
                             <a href="wallet-topup-activate.php" class="up-nav-sublink<?= $currentPage === 'wallet-topup-activate' ? ' is-active' : '' ?>">Activate Member</a>
                             <?php endif; ?>
                             <?php if ($featProducts): ?>
@@ -345,6 +377,8 @@ $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="
                     <div class="up-nav-sub" id="upNavSubShop">
                         <div class="up-nav-sub-inner">
                             <a href="purchase-product.php" class="up-nav-sublink<?= $currentPage === 'purchase-product' ? ' is-active' : '' ?>">Purchase Product</a>
+                            <a href="purchase-cart.php" class="up-nav-sublink<?= in_array($currentPage, ['purchase-cart', 'purchase-checkout'], true) ? ' is-active' : '' ?>">Cart / Checkout</a>
+                            <a href="purchase-tracking.php" class="up-nav-sublink<?= $currentPage === 'purchase-tracking' ? ' is-active' : '' ?>">Purchase Tracking</a>
                             <a href="purchase-report.php" class="up-nav-sublink<?= $currentPage === 'purchase-report' ? ' is-active' : '' ?>">Purchase Report</a>
                             <a href="purchase-invoice.php" class="up-nav-sublink<?= $currentPage === 'purchase-invoice' ? ' is-active' : '' ?>">Purchase Invoice</a>
                         </div>
@@ -418,29 +452,67 @@ $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="
                     <a href="edit-profile.php" data-search="edit profile">Edit Profile</a>
                     <a href="id-card.php" data-search="id card identity membership">ID Card</a>
                     <a href="welcome-letter.php" data-search="welcome letter certificate seller">Welcome Letter</a>
-                    <a href="my-treeview.php" data-search="team tree binary">My Treeview</a>
                     <a href="my-direct.php" data-search="direct team">My Direct</a>
+                    <a href="my-downline.php" data-search="downline team">My Downline</a>
+                    <?php if ($featBinary): ?>
+                    <a href="my-treeview.php" data-search="team tree binary">My Treeview</a>
+                    <?php endif; ?>
+                    <?php if ($featMatrix): ?>
+                    <a href="matrix-tree.php" data-search="matrix tree">Matrix Tree</a>
+                    <?php endif; ?>
+                    <?php if ($featLevel): ?>
+                    <a href="level-tree.php" data-search="level tree generations">Level Tree</a>
+                    <?php endif; ?>
                     <a href="income-summary.php" data-search="income earnings">Income Summary</a>
-                    <a href="wallet.php" data-search="wallet income topup shopping">My Wallets</a>
+                    <?php if ($featIncomeBinary): ?>
+                    <a href="income-binary.php" data-search="binary income">Binary Income</a>
+                    <?php endif; ?>
+                    <?php if ($featIncomeReferral): ?>
+                    <a href="income-referral.php" data-search="referral income">Referral Income</a>
+                    <?php endif; ?>
+                    <?php if ($featIncomeMatching): ?>
+                    <a href="income-matching.php" data-search="matching income">Matching Income</a>
+                    <?php endif; ?>
+                    <?php if ($featIncomeLevel): ?>
+                    <a href="income-level.php" data-search="level income">Level Income</a>
+                    <?php endif; ?>
+                    <a href="income-other.php" data-search="other income">Other Income</a>
+                    <a href="wallet.php" data-search="wallet income">My Wallets</a>
                     <a href="wallet-income.php" data-search="income wallet">Income Wallet</a>
+                    <?php if ($featWalletTopup): ?>
                     <a href="wallet-topup.php" data-search="topup wallet add money">Topup Wallet</a>
+                    <?php endif; ?>
+                    <?php if ($featWalletActivate): ?>
                     <a href="wallet-topup-activate.php" data-search="activate member topup">Activate with Topup</a>
+                    <?php endif; ?>
+                    <?php if ($featProducts): ?>
                     <a href="wallet-shopping.php" data-search="shopping wallet">Shopping Wallet</a>
-                    <a href="wallet-transfer.php" data-search="wallet transfer fund">Wallet Transfer</a>
                     <a href="purchase-product.php" data-search="purchase product shop buy cart">Purchase Product</a>
+                    <a href="purchase-cart.php" data-search="cart checkout">Cart / Checkout</a>
+                    <a href="purchase-tracking.php" data-search="purchase tracking delivery courier shipment">Purchase Tracking</a>
                     <a href="purchase-report.php" data-search="purchase report orders history">Purchase Report</a>
                     <a href="purchase-invoice.php" data-search="purchase invoice bill">Purchase Invoice</a>
+                    <?php endif; ?>
+                    <a href="wallet-transfer.php" data-search="wallet transfer fund">Wallet Transfer</a>
+                    <?php if ($featKyc): ?>
                     <a href="kyc-pan.php" data-search="kyc pan card">Pan Card KYC</a>
                     <a href="kyc-bank.php" data-search="kyc bank detail account">Bank Detail KYC</a>
                     <a href="kyc-aadhar.php" data-search="kyc aadhar address proof">Aadhaar KYC</a>
                     <a href="kyc-upi.php" data-search="kyc upi id payment">UPI Details KYC</a>
+                    <?php endif; ?>
+                    <?php if ($featWithdrawals): ?>
                     <a href="withdrawal-fund.php" data-search="withdraw payout">Withdrawal Fund</a>
                     <a href="withdrawal-report.php" data-search="withdraw report">Withdrawal Report</a>
+                    <?php endif; ?>
                     <a href="transaction-report.php" data-search="transaction report">Transaction Report</a>
                     <a href="support.php" data-search="support help contact">Support</a>
                     <?php if ($needsActivationNav): ?>
                     <a href="activate.php" data-search="activate package payment">Activate Account</a>
+                    <?php if ($featTpin): ?>
                     <a href="tpin.php" data-search="tpin topup pin transfer epin">T-Pin</a>
+                    <?php endif; ?>
+                    <?php elseif ($needsShopActivationNav): ?>
+                    <a href="purchase-product.php" data-search="activate product shop purchase">Activate via Shop</a>
                     <?php elseif ($canUpgradeNav || $planNavPending): ?>
                     <a href="activate.php" data-search="upgrade package difference">Upgrade Plan</a>
                     <?php endif; ?>

@@ -50,8 +50,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_m
     if (!$errors) {
         $res = wallet_topup_submit_request($pdo, $uid, $amount, $mode, $utr, $proofPath, $note !== '' ? $note : null);
         if ($res['ok']) {
-            flash('success', 'Topup request submitted. Waiting for admin approval.');
-            header('Location: wallet-topup.php');
+            flash('success', 'Topup request submitted. After admin approval, transfer Topup → Shopping Wallet, then buy products.');
+            header('Location: wallet-topup.php' . (in_array(($_POST['next'] ?? $_GET['next'] ?? ''), ['shop', 'checkout'], true) ? '?next=' . rawurlencode((string) ($_POST['next'] ?? $_GET['next'])) : ''));
             exit;
         }
         if ($proofPath) {
@@ -114,6 +114,12 @@ $quickIcons = [
     'shopping' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 6h15l-1.5 9h-12z"/><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M6 6L5 3H2"/></svg>',
 ];
 $quickTone = ['income' => 'green', 'topup' => 'blue', 'shopping' => 'purple'];
+$next = (string) ($_GET['next'] ?? $_POST['next'] ?? '');
+if (!in_array($next, ['shop', 'checkout'], true)) {
+    $next = '';
+}
+$featWalletActivate = feature_module_allowed('wallet_activate');
+$featProducts = feature_module_allowed('products');
 
 require_once __DIR__ . '/includes/header.php';
 $flash = get_flash();
@@ -121,12 +127,17 @@ $flash = get_flash();
 <div class="up-page-head">
     <div>
         <h1>Topup Wallet</h1>
-        <p>Add money for activations &amp; transfers. Admin verifies UTR / proof before credit.</p>
+        <p>Step 1 for shopping: request topup → admin approves → transfer to Shopping Wallet → buy.</p>
     </div>
     <div class="up-head-actions">
         <button type="button" class="up-btn up-btn-primary" data-wal-open-add>Add Money</button>
-        <a href="wallet-transfer.php" class="up-btn up-btn-outline">Transfer</a>
+        <a href="wallet-transfer.php?from=topup&to=shopping<?= $next !== '' ? '&next=' . rawurlencode($next) : '' ?>" class="up-btn up-btn-outline">Transfer</a>
+        <?php if ($featProducts): ?>
+        <a href="purchase-product.php" class="up-btn up-btn-outline">Buy Products</a>
+        <?php endif; ?>
+        <?php if ($featWalletActivate): ?>
         <a href="wallet-topup-activate.php" class="up-btn up-btn-outline">Activate Member</a>
+        <?php endif; ?>
         <a href="wallet.php" class="up-btn up-btn-outline">All Wallets</a>
     </div>
 </div>
@@ -137,6 +148,13 @@ $flash = get_flash();
 <?php foreach ($errors as $err): ?>
     <div class="up-alert up-alert-err"><?= e($err) ?></div>
 <?php endforeach; ?>
+<?php if ($next === 'shop' || $next === 'checkout'): ?>
+<div class="up-alert up-alert-ok">
+    Shopping flow: request topup here → after approval,
+    <a href="wallet-transfer.php?from=topup&to=shopping&next=<?= e($next) ?>">transfer to Shopping Wallet</a>
+    → <?= $next === 'checkout' ? '<a href="purchase-checkout.php?step=payment">complete payment</a>' : '<a href="purchase-product.php">buy products</a>' ?>.
+</div>
+<?php endif; ?>
 
 <div class="wal-stats">
     <article class="wal-stat g-blue">
@@ -291,6 +309,7 @@ $flash = get_flash();
 <dialog class="wal-dialog" id="walAddMoneyDialog"<?= $openModal || $errors ? ' open' : '' ?>>
     <form method="post" enctype="multipart/form-data" class="wal-dialog-card">
         <input type="hidden" name="action" value="add_money">
+        <?php if ($next !== ''): ?><input type="hidden" name="next" value="<?= e($next) ?>"><?php endif; ?>
 
         <div class="wal-dialog-hero">
             <div class="wal-dialog-hero-row">

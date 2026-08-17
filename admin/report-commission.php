@@ -8,6 +8,24 @@ $q = trim((string) ($_GET['q'] ?? ''));
 $type = trim((string) ($_GET['type'] ?? ''));
 $status = trim((string) ($_GET['status'] ?? ''));
 
+$enabledTypes = ['other'];
+if (feature_enabled('feature_binary_income') && plan_uses_binary()) {
+    $enabledTypes[] = 'binary';
+}
+if (feature_enabled('feature_referral_income')) {
+    $enabledTypes[] = 'referral';
+}
+if (feature_enabled('feature_matching_income') && plan_uses_binary()) {
+    $enabledTypes[] = 'matching';
+}
+if (feature_enabled('feature_level_income') && plan_uses_level()) {
+    $enabledTypes[] = 'level';
+}
+$typeFilterOptions = ['' => 'All types'];
+foreach ($enabledTypes as $t) {
+    $typeFilterOptions[$t] = ucfirst($t);
+}
+
 $where = ["DATE(c.created_at) BETWEEN ? AND ?", "c.status != 'cancelled'"];
 $params = [$from, $to];
 
@@ -15,7 +33,7 @@ if ($status !== '' && in_array($status, ['pending', 'paid', 'cancelled'], true))
     $where = ["DATE(c.created_at) BETWEEN ? AND ?", 'c.status = ?'];
     $params = [$from, $to, $status];
 }
-if ($type !== '' && in_array($type, ['binary', 'referral', 'matching', 'level', 'other'], true)) {
+if ($type !== '' && in_array($type, $enabledTypes, true)) {
     $where[] = 'c.type = ?';
     $params[] = $type;
 }
@@ -59,9 +77,7 @@ require_once __DIR__ . '/../includes/header.php';
         <?php
         report_filter_form('report-commission.php', $from, $to, [
             ['name' => 'q', 'label' => 'Search', 'type' => 'text', 'value' => $q, 'placeholder' => 'Member ID / name / note', 'wide' => true],
-            ['name' => 'type', 'label' => 'Type', 'type' => 'select', 'value' => $type, 'options' => [
-                '' => 'All types', 'binary' => 'Binary', 'referral' => 'Referral', 'matching' => 'Matching', 'level' => 'Level', 'other' => 'Other',
-            ]],
+            ['name' => 'type', 'label' => 'Type', 'type' => 'select', 'value' => $type, 'options' => $typeFilterOptions],
             ['name' => 'status', 'label' => 'Status', 'type' => 'select', 'value' => $status, 'options' => [
                 '' => 'All (excl. cancelled)', 'pending' => 'Pending', 'paid' => 'Paid', 'cancelled' => 'Cancelled',
             ]],

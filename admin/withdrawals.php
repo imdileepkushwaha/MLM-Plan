@@ -6,6 +6,7 @@ require_once __DIR__ . '/../includes/wallet.php';
 $pageTitle = 'Withdrawals';
 
 wd_ensure_columns($pdo);
+wd_ensure_payout_log_table($pdo);
 
 if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     $status = $_GET['status'] ?? 'approved';
@@ -68,6 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $id = (int) ($_POST['id'] ?? 0);
     $action = $_POST['action'] ?? '';
     $note = trim($_POST['admin_note'] ?? '');
+    $payoutRef = trim((string) ($_POST['payout_ref'] ?? ''));
 
     $stmt = $pdo->prepare('SELECT * FROM withdrawals WHERE id = ?');
     $stmt->execute([$id]);
@@ -77,6 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($action === 'approve') {
             $sp = sp_call_approve_withdrawal($pdo, $id, $note);
             if ($sp['message'] !== 'Procedure unavailable' && $sp['ok']) {
+                wd_payout_log_append($pdo, wd_payout_log_from_row($wd, 'approve', $note));
                 log_activity('withdrawal_approve', "Approved withdrawal #$id");
                 flash('success', $sp['message']);
             } elseif ($sp['message'] !== 'Procedure unavailable' && !$sp['ok']) {
@@ -104,6 +107,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             flash('error', $ded['error'] ?: 'Insufficient income wallet balance.');
                         } else {
                             $pdo->commit();
+                            $wd['admin_note'] = $note;
+                            wd_payout_log_append($pdo, wd_payout_log_from_row($wd, 'approve', $note));
                             log_activity('withdrawal_approve', "Approved withdrawal #$id");
                             flash('success', 'Withdrawal approved. Income wallet deducted. Pay net ' . strip_tags(currency(wd_net_display($wd))) . '.');
                         }
@@ -118,6 +123,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($action === 'reject') {
             $sp = sp_call_reject_withdrawal($pdo, $id, $note);
             if ($sp['message'] !== 'Procedure unavailable' && $sp['ok']) {
+                wd_payout_log_append($pdo, wd_payout_log_from_row($wd, 'reject', $note));
                 log_activity('withdrawal_reject', "Rejected withdrawal #$id");
                 flash('success', $sp['message']);
             } elseif ($sp['message'] !== 'Procedure unavailable' && !$sp['ok']) {
@@ -125,6 +131,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $pdo->prepare("UPDATE withdrawals SET status = 'rejected', admin_note = ?, processed_at = NOW() WHERE id = ? AND status = 'pending'")
                     ->execute([$note, $id]);
+                wd_payout_log_append($pdo, wd_payout_log_from_row($wd, 'reject', $note));
                 log_activity('withdrawal_reject', "Rejected withdrawal #$id");
                 flash('success', 'Withdrawal rejected.');
             }
@@ -135,9 +142,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Only approved → paid (never pending → paid)
     if ($wd && $wd['status'] === 'approved' && $action === 'paid') {
+        $finalNote = $note !== '' ? $note : ($wd['admin_note'] ?? null);
         $pdo->prepare("UPDATE withdrawals SET status = 'paid', admin_note = ?, processed_at = NOW() WHERE id = ? AND status = 'approved'")
-            ->execute([$note !== '' ? $note : ($wd['admin_note'] ?? null), $id]);
-        log_activity('withdrawal_paid', "Marked withdrawal #$id paid");
+            ->execute([$finalNote, $id]);
+        $wd['admin_note'] = $finalNote;
+        wd_payout_log_append($pdo, wd_payout_log_from_row($wd, 'paid', (string) $finalNote, $payoutRef));
+        log_activity('withdrawal_paid', "Marked withdrawal #$id paid" . ($payoutRef !== '' ? " ref=$payoutRef" : ''));
         flash('success', 'Marked as paid. Net remitted: ' . strip_tags(currency(wd_net_display($wd))) . '.');
     }
 
@@ -265,8 +275,9 @@ require_once __DIR__ . '/../includes/header.php';
                             <?= action_reject_btn('Reject this request?') ?>
                         </form>
                         <?php elseif ($r['status'] === 'approved'): ?>
-                        <form method="post" class="action-icons">
+                        <form method="post" class="action-icons" style="flex-wrap:wrap;max-width:220px">
                             <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
+                            <input type="text" name="payout_ref" placeholder="UTR / ref" style="width:100%;padding:0.3rem;font-size:0.8rem;border:1px solid var(--border);border-radius:6px;margin-bottom:0.25rem" maxlength="120">
                             <?= action_paid_btn('Confirm bank remittance of net amount?') ?>
                         </form>
                         <?php else: ?>
@@ -286,6 +297,54 @@ require_once __DIR__ . '/../includes/header.php';
         <?php endfor; ?>
     </div>
     <?php endif; ?>
+</div>
+
+<?php
+$payoutLogs = wd_payout_logs_recent($pdo, 40);
+?>
+<div class="panel" style="margin-top:1.25rem">
+    <div class="panel-header">
+        <h2>Immutable payout log</h2>
+        <span class="muted" style="font-size:0.85rem">Append-only · approve / reject / paid with admin + UTR</span>
+    </div>
+    <div class="table-wrap">
+        <table class="data">
+            <thead>
+                <tr>
+                    <th>When</th>
+                    <th>Event</th>
+                    <th>WD #</th>
+                    <th>Member</th>
+                    <th>Gross / Net</th>
+                    <th>UTR / Ref</th>
+                    <th>Admin</th>
+                    <th>Note</th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php if (!$payoutLogs): ?>
+                <tr><td colspan="8" class="empty-state">No payout events yet.</td></tr>
+            <?php else: foreach ($payoutLogs as $pl): ?>
+                <tr>
+                    <td><span class="muted"><?= !empty($pl['created_at']) ? e(date('d M Y H:i', strtotime((string) $pl['created_at']))) : '—' ?></span></td>
+                    <td><span class="pkg-chip"><?= e((string) $pl['event_type']) ?></span></td>
+                    <td>#<?= (int) $pl['withdrawal_id'] ?></td>
+                    <td>
+                        <?= e((string) ($pl['full_name'] ?? '—')) ?><br>
+                        <small><?= e((string) ($pl['mid'] ?? '')) ?></small>
+                    </td>
+                    <td>
+                        <strong><?= currency((float) $pl['gross_amount']) ?></strong><br>
+                        <small>Net <?= currency((float) $pl['net_amount']) ?></small>
+                    </td>
+                    <td><?= e((string) ($pl['payout_ref'] ?? '—')) ?></td>
+                    <td><?= e((string) ($pl['admin_username'] ?? '—')) ?></td>
+                    <td style="max-width:160px;font-size:0.8rem"><?= e((string) ($pl['admin_note'] ?? '')) ?></td>
+                </tr>
+            <?php endforeach; endif; ?>
+            </tbody>
+        </table>
+    </div>
 </div>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>

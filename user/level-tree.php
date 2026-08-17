@@ -6,21 +6,14 @@ require_once __DIR__ . '/includes/header.php';
 $uid = (int) $user['id'];
 $maxLevel = max(1, min(20, (int) ($_GET['max'] ?? 10)));
 
-$downline = team_collect_downline($pdo, $uid, 'all');
+$downline = team_collect_sponsor_downline($pdo, $uid, $maxLevel);
 $grouped = team_group_by_level($downline);
-if ($maxLevel > 0) {
-    $grouped = array_filter(
-        $grouped,
-        static fn ($members, $lvl) => (int) $lvl <= $maxLevel,
-        ARRAY_FILTER_USE_BOTH
-    );
-}
 $deepest = $grouped ? max(array_keys($grouped)) : 0;
 ?>
 <div class="up-page-head">
     <div>
         <h1>Level Tree</h1>
-        <p>Your placement downline grouped by generation level.</p>
+        <p>Your sponsor-team generations (level income network).</p>
     </div>
     <form method="get" class="team-search">
         <label class="team-max-label">Show up to
@@ -51,7 +44,7 @@ $deepest = $grouped ? max(array_keys($grouped)) : 0;
     <article class="team-stat g-green">
         <span class="team-stat-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2L2 7l10 5 10-5-10-5z"/></svg></span>
         <div>
-            <span class="team-stat-label">Level 1</span>
+            <span class="team-stat-label">Level 1 (Direct)</span>
             <strong><?= isset($grouped[1]) ? count($grouped[1]) : 0 ?></strong>
         </div>
     </article>
@@ -68,13 +61,10 @@ $deepest = $grouped ? max(array_keys($grouped)) : 0;
 <section class="team-card">
     <div class="team-empty-state">
         <strong>No level data yet</strong>
-        <p>Build your left/right placement team to see generations here.</p>
+        <p>When members join under your sponsor link, generations appear here.</p>
     </div>
 </section>
-<?php else: foreach ($grouped as $level => $members):
-    $leftN = count(array_filter($members, fn ($m) => ($m['leg'] ?? '') === 'left'));
-    $rightN = count($members) - $leftN;
-    ?>
+<?php else: foreach ($grouped as $level => $members): ?>
 <section class="team-card level-card">
     <div class="team-banner is-level">
         <div class="team-banner-main">
@@ -82,7 +72,7 @@ $deepest = $grouped ? max(array_keys($grouped)) : 0;
             <div>
                 <span class="team-banner-kicker">Generation</span>
                 <h2>Level <?= (int) $level ?></h2>
-                <p><?= count($members) ?> member<?= count($members) === 1 ? '' : 's' ?> · Left <?= $leftN ?> · Right <?= $rightN ?></p>
+                <p><?= count($members) ?> member<?= count($members) === 1 ? '' : 's' ?></p>
             </div>
         </div>
     </div>
@@ -91,7 +81,7 @@ $deepest = $grouped ? max(array_keys($grouped)) : 0;
             $ini = user_initials((string) $m['full_name']);
             $photo = user_photo_url($m['photo'] ?? null);
             ?>
-            <article class="level-tile <?= ($m['leg'] ?? '') === 'left' ? 'leg-l' : 'leg-r' ?>">
+            <article class="level-tile">
                 <div class="level-tile-top">
                     <?php if ($photo): ?>
                         <div class="team-ava sm has-photo"><img src="<?= e($photo) ?>" alt=""></div>
@@ -108,7 +98,7 @@ $deepest = $grouped ? max(array_keys($grouped)) : 0;
                     <span>@<?= e($m['username']) ?></span>
                 </div>
                 <div class="level-tile-foot">
-                    <span class="leg-chip"><?= e(ucfirst($m['leg'] ?? '')) ?> · <?= e(ucfirst((string) ($m['position'] ?: '—'))) ?></span>
+                    <span class="leg-chip">Sponsor · <?= e($m['sponsor_mid'] ?? '—') ?></span>
                     <span><?= e($m['package_name'] ?? 'No package') ?></span>
                 </div>
             </article>

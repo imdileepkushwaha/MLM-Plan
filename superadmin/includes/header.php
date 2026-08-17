@@ -14,6 +14,8 @@ $planLabel = [
     'hybrid' => 'Hybrid',
     'binary' => 'Binary',
     'level' => 'Level',
+    'unilevel' => 'Unilevel',
+    'matrix' => 'Matrix ' . matrix_width() . '×',
 ][plan_mode()] ?? plan_mode();
 
 $saIco = static function (string $path): string {
@@ -23,9 +25,11 @@ $icoDash = $saIco('<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y
 $icoFeat = $saIco('<path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>');
 $icoMoney = $saIco('<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>');
 $icoBrand = $saIco('<path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/>');
-$icoLock = $saIco('<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>');
+$icoLicense = $saIco('<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/><circle cx="12" cy="16" r="1"/>');
+$icoSettings = $saIco('<circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>');
 $icoAdmin = $saIco('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>');
 $icoUser = $saIco('<path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>');
+$favUrl = company_favicon_url();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -33,6 +37,7 @@ $icoUser = $saIco('<path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e($pageTitle ?? 'Super Admin') ?> | <?= e($company) ?></title>
+    <?php if ($favUrl): ?><link rel="icon" href="<?= e($favUrl) ?>"><?php endif; ?>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../assets/css/admin.css?v=<?= (int) @filemtime(__DIR__ . '/../assets/css/admin.css') ?>">
     <link rel="stylesheet" href="../assets/css/superadmin.css?v=<?= (int) @filemtime(__DIR__ . '/../assets/css/superadmin.css') ?>">
@@ -78,8 +83,11 @@ $icoUser = $saIco('<path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx
                 <a href="branding.php" class="nav-link <?= $currentPage === 'branding' ? 'active' : '' ?>">
                     <span class="nav-link-left"><?= $icoBrand ?><span class="nav-label">Client Branding</span></span>
                 </a>
-                <a href="password.php" class="nav-link <?= $currentPage === 'password' ? 'active' : '' ?>">
-                    <span class="nav-link-left"><?= $icoLock ?><span class="nav-label">Change Password</span></span>
+                <a href="license.php" class="nav-link <?= $currentPage === 'license' ? 'active' : '' ?>">
+                    <span class="nav-link-left"><?= $icoLicense ?><span class="nav-label">Client License</span></span>
+                </a>
+                <a href="settings.php" class="nav-link <?= $currentPage === 'settings' || $currentPage === 'password' ? 'active' : '' ?>">
+                    <span class="nav-link-left"><?= $icoSettings ?><span class="nav-label">Settings</span></span>
                 </a>
             </div>
             <div class="nav-section">
@@ -164,9 +172,9 @@ $icoUser = $saIco('<path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/></svg>
                             Plan &amp; Features
                         </a>
-                        <a href="password.php" class="dropdown-item">
+                        <a href="settings.php?tab=security" class="dropdown-item">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-                            Change Password
+                            Settings · Security
                         </a>
                         <div class="dropdown-divider"></div>
                         <a href="../admin/login.php" class="dropdown-item" target="_blank" rel="noopener">

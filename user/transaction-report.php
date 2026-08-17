@@ -16,6 +16,7 @@ $page = $data['page'];
 $creditSum = $data['credit_sum'];
 $debitSum = $data['debit_sum'];
 $net = $creditSum - $debitSum;
+$showWithdrawUi = feature_module_allowed('withdrawals');
 
 $queryBase = http_build_query(array_filter([
     'kind' => $kind !== '' ? $kind : null,
@@ -27,7 +28,9 @@ $queryBase = http_build_query(array_filter([
         <h1>Transaction Report</h1>
         <p>Complete ledger of income credits and withdrawal debits on your account.</p>
     </div>
+    <?php if ($showWithdrawUi): ?>
     <a href="withdrawal-fund.php" class="up-btn up-btn-primary">Withdraw</a>
+    <?php endif; ?>
 </div>
 
 <div class="txn-stats">
@@ -108,7 +111,9 @@ $queryBase = http_build_query(array_filter([
                             <p>Income credits and withdrawal requests will appear here.</p>
                             <div class="txn-empty-actions">
                                 <a href="income-summary.php" class="up-btn up-btn-outline">My Income</a>
+                                <?php if ($showWithdrawUi): ?>
                                 <a href="withdrawal-fund.php" class="up-btn up-btn-primary">Withdraw</a>
+                                <?php endif; ?>
                             </div>
                         </div>
                     </td>

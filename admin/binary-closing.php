@@ -101,12 +101,12 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
         </div>
         <div class="rpt-hero-actions">
-            <a class="btn btn-outline btn-sm" href="../superadmin/commission.php?sub=binary">Commission rates (Super Admin)</a>
+            <a class="btn btn-outline btn-sm" href="settings.php?tab=general">Settings</a>
         </div>
     </header>
 
     <?php if (!$binaryEnabled): ?>
-        <div class="cls-alert">Binary income is disabled. Enable it under Settings → Commission → Binary Income.</div>
+        <div class="cls-alert">Binary income is disabled for this install.</div>
     <?php endif; ?>
 
     <div class="rpt-stats">

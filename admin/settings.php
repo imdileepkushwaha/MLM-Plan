@@ -4,9 +4,17 @@ $pageTitle = 'Settings';
 
 $tab = $_GET['tab'] ?? 'general';
 $allowedTabs = ['general', 'withdrawal', 'contact', 'security', 'activity'];
+if (!feature_module_allowed('withdrawals')) {
+    $allowedTabs = array_values(array_filter($allowedTabs, static fn ($t) => $t !== 'withdrawal'));
+}
 if (!in_array($tab, $allowedTabs, true)) {
     if ($tab === 'commission') {
-        flash('error', 'Commission / plan rates are managed by Super Admin only.');
+        flash('error', 'Commission rates are configured for this install and cannot be edited here.');
+        header('Location: settings.php?tab=general');
+        exit;
+    }
+    if ($tab === 'withdrawal') {
+        flash('error', 'Withdrawal module is not available for this install.');
         header('Location: settings.php?tab=general');
         exit;
     }
@@ -53,8 +61,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'maintenance_mode',
             'currency',
             'currency_symbol',
-            'member_id_prefix',
-            'member_id_pad',
         ],
         'withdrawal' => [
             'min_withdrawal',
@@ -85,7 +91,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     ];
 
     if ($postTab === 'commission') {
-        flash('error', 'Commission / plan rates are managed by Super Admin only.');
+        flash('error', 'Commission rates are configured for this install and cannot be edited here.');
+        header('Location: settings.php?tab=general');
+        exit;
+    } elseif ($postTab === 'withdrawal' && !feature_module_allowed('withdrawals')) {
+        flash('error', 'Withdrawal module is not available for this install.');
         header('Location: settings.php?tab=general');
         exit;
     } elseif ($postTab === 'contact') {
@@ -104,19 +114,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($key === 'maintenance_mode') {
                     $val = ($val === 'on') ? 'on' : 'off';
                 }
-                if ($key === 'member_id_prefix') {
-                    $val = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $val) ?? '');
-                    if ($val === '') {
-                        $val = 'MLM';
-                    }
-                    $val = substr($val, 0, 10);
-                }
-                if ($key === 'member_id_pad') {
-                    $val = (string) max(3, min(8, (int) $val));
-                }
                 $saveSetting($pdo, $key, $val);
             }
         }
+
+        if ($postTab === 'general') {
+            $sigUp = branding_store_image($_FILES['company_signature'] ?? [], 'signature');
+            if (!$sigUp['ok']) {
+                flash('error', $sigUp['error'] ?? 'Signature upload failed.');
+                header('Location: settings.php?tab=general');
+                exit;
+            }
+            if (!empty($sigUp['path'])) {
+                branding_delete_file(setting('company_signature', ''));
+                $saveSetting($pdo, 'company_signature', $sigUp['path']);
+            } elseif (!empty($_POST['remove_signature'])) {
+                branding_delete_file(setting('company_signature', ''));
+                $saveSetting($pdo, 'company_signature', '');
+            }
+        }
+
         clear_setting_cache();
         if ($postTab === 'general' && isset($_POST['maintenance_mode'])) {
             $newMode = ($_POST['maintenance_mode'] === 'on') ? 'on' : 'off';
@@ -173,29 +190,18 @@ foreach ($rows as $r) {
     $settings[$r['setting_key']] = $r['setting_value'];
 }
 
-// Ensure member ID format settings exist
-foreach (['member_id_prefix' => 'MLM', 'member_id_pad' => '5'] as $k => $v) {
-    if (!isset($settings[$k])) {
-        try {
-            $pdo->prepare('INSERT INTO settings (setting_key, setting_value) VALUES (?, ?)')->execute([$k, $v]);
-            $settings[$k] = $v;
-            clear_setting_cache($k);
-        } catch (Throwable $e) {
-            $settings[$k] = $v;
-        }
-    }
-}
-
 $logs = $pdo->query("
     SELECT l.*, a.username
     FROM activity_logs l
     LEFT JOIN admins a ON a.id = l.admin_id
+    WHERE l.action NOT LIKE 'superadmin:%'
     ORDER BY l.id DESC
     LIMIT 30
 ")->fetchAll();
 
 $maintenance = $settings['maintenance_mode'] ?? 'off';
 $isOnline = $maintenance !== 'on';
+$signatureUrl = company_signature_url();
 
 $contactInquiries = [];
 $contactNewCount = 0;
@@ -209,36 +215,26 @@ if ($tab === 'contact') {
 }
 
 require_once __DIR__ . '/../includes/header.php';
-
-$planModeLabel = [
-    'hybrid' => 'Hybrid (Binary + Level)',
-    'binary' => 'Binary only',
-    'level' => 'Level only',
-][plan_mode()] ?? plan_mode();
 ?>
-
-<div class="alert alert-info">
-    <strong>Plan locked by Super Admin.</strong>
-    Mode: <?= e($planModeLabel) ?> · Preset: <?= e(setting('feature_preset', 'hybrid_full')) ?>.
-    Commission rates and module on/off are not editable here.
-</div>
 
 <div class="settings-layout">
     <aside class="settings-nav">
         <div class="settings-nav-group">
-            <span class="settings-nav-label">Platform</span>
+            <span class="settings-nav-label">Workspace</span>
             <a href="settings.php?tab=general" class="settings-nav-item <?= $tab === 'general' ? 'active' : '' ?>">
                 <span class="sni-ico red">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
                 </span>
                 General
             </a>
+            <?php if (feature_module_allowed('withdrawals')): ?>
             <a href="settings.php?tab=withdrawal" class="settings-nav-item <?= $tab === 'withdrawal' ? 'active' : '' ?>">
                 <span class="sni-ico pink">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
                 </span>
                 Withdrawal Rules
             </a>
+            <?php endif; ?>
             <a href="settings.php?tab=contact" class="settings-nav-item <?= $tab === 'contact' ? 'active' : '' ?>">
                 <span class="sni-ico teal">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
@@ -266,7 +262,7 @@ $planModeLabel = [
 
     <section class="settings-main">
         <?php if ($tab === 'general'): ?>
-        <form method="post" class="settings-card">
+        <form method="post" class="settings-card" enctype="multipart/form-data">
             <input type="hidden" name="tab" value="general">
             <div class="settings-card-head">
                 <div class="settings-title-block">
@@ -275,7 +271,7 @@ $planModeLabel = [
                     </span>
                     <div>
                         <h2>General settings</h2>
-                        <p>Site identity, support contact, and maintenance mode.</p>
+                        <p>Site identity, authorized signature, and maintenance mode.</p>
                     </div>
                 </div>
                 <?php if ($isOnline): ?>
@@ -315,60 +311,38 @@ $planModeLabel = [
                 </div>
             </div>
 
-            <?php
-            $idPrefix = $settings['member_id_prefix'] ?? 'MLM';
-            $idPad = max(3, min(8, (int) ($settings['member_id_pad'] ?? 5)));
-            // Temporary preview using posted/current settings values
-            $previewPrefix = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string) $idPrefix) ?? '');
-            if ($previewPrefix === '') {
-                $previewPrefix = 'MLM';
-            }
-            $previewNext = 1;
-            try {
-                $pStmt = $pdo->prepare('SELECT member_id FROM members WHERE member_id LIKE ?');
-                $pStmt->execute([$previewPrefix . '%']);
-                $plen = strlen($previewPrefix);
-                foreach ($pStmt->fetchAll(PDO::FETCH_COLUMN) as $mid) {
-                    $suffix = substr((string) $mid, $plen);
-                    if ($suffix !== '' && ctype_digit($suffix)) {
-                        $previewNext = max($previewNext, (int) $suffix + 1);
-                    }
-                }
-            } catch (Throwable $e) {
-                $previewNext = 1;
-            }
-            $previewId = $previewPrefix . str_pad((string) $previewNext, $idPad, '0', STR_PAD_LEFT);
-            ?>
             <div class="settings-section">
                 <div class="settings-section-head">
-                    <span class="ssh-ico orange">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    <span class="ssh-ico teal">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 3a2.85 2.85 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                     </span>
-                    <h3>Member ID Format</h3>
+                    <h3>Authorized Signature</h3>
                 </div>
-                <div class="settings-fields two">
-                    <div class="form-group">
-                        <label for="member_id_prefix">ID Prefix</label>
-                        <input type="text" id="member_id_prefix" name="member_id_prefix" maxlength="10"
-                               value="<?= e($idPrefix) ?>"
-                               pattern="[A-Za-z0-9]+" title="Letters and numbers only"
-                               placeholder="MLM" required>
-                        <small class="field-hint">Used for new members only (e.g. MLM, ABC, GOLD). Existing IDs stay unchanged.</small>
+                <div class="settings-sign-upload" data-sign-upload>
+                    <input type="file" name="company_signature" id="companySignatureFile" class="settings-sign-input" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp">
+                    <div class="settings-sign-preview<?= $signatureUrl ? ' has-file' : '' ?>" id="companySignaturePreview">
+                        <?php if ($signatureUrl): ?>
+                            <img src="<?= e($signatureUrl) ?>" alt="Authorized signature">
+                        <?php else: ?>
+                            <span class="settings-sign-empty" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 3a2.85 2.85 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                                <em>No signature</em>
+                            </span>
+                        <?php endif; ?>
                     </div>
-                    <div class="form-group">
-                        <label for="member_id_pad">Number Digits</label>
-                        <input type="number" id="member_id_pad" name="member_id_pad" min="3" max="8" step="1"
-                               value="<?= (int) $idPad ?>" required>
-                        <small class="field-hint">Padding length (3–8). Example with 5 → 00001</small>
+                    <div class="settings-sign-meta">
+                        <p>Upload a clear signature image (PNG with transparent background recommended). Used on purchase invoices, welcome letter, and other authorized documents.</p>
+                        <div class="settings-sign-actions">
+                            <label for="companySignatureFile" class="btn btn-outline btn-sm">Choose signature</label>
+                            <?php if ($signatureUrl): ?>
+                            <label class="settings-sign-remove">
+                                <input type="checkbox" name="remove_signature" value="1">
+                                <span>Remove current signature</span>
+                            </label>
+                            <?php endif; ?>
+                        </div>
+                        <span class="settings-sign-name" id="companySignatureName"><?= $signatureUrl ? 'Current signature set' : 'JPG, PNG or WebP · max 2MB' ?></span>
                     </div>
-                </div>
-                <div class="settings-info" style="margin-top:0.85rem">
-                    <span class="si-ico">i</span>
-                    <p>
-                        Next new member ID will look like
-                        <strong id="memberIdPreview"><?= e($previewId) ?></strong>
-                        (auto-increments per prefix).
-                    </p>
                 </div>
             </div>
 
@@ -399,162 +373,9 @@ $planModeLabel = [
                 </button>
             </div>
         </form>
-        <script>
-        (function () {
-            var prefix = document.getElementById('member_id_prefix');
-            var pad = document.getElementById('member_id_pad');
-            var preview = document.getElementById('memberIdPreview');
-            var nextNum = <?= (int) $previewNext ?>;
-            if (!prefix || !pad || !preview) return;
-            function refresh() {
-                var p = (prefix.value || 'MLM').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'MLM';
-                var d = Math.max(3, Math.min(8, parseInt(pad.value, 10) || 5));
-                var n = String(nextNum);
-                while (n.length < d) n = '0' + n;
-                preview.textContent = p + n;
-            }
-            prefix.addEventListener('input', refresh);
-            pad.addEventListener('input', refresh);
-        })();
-        </script>
 
-        <?php elseif ($tab === 'commission'):
-            $levelCount = max(1, min(20, (int) ($settings['level_income_levels'] ?? 10)));
-            $defaultLevelPct = [1 => '5', 2 => '3', 3 => '2', 4 => '1', 5 => '1', 6 => '0.5', 7 => '0.5', 8 => '0.5', 9 => '0.5', 10 => '0.5'];
-            $binaryEnabled = ($settings['binary_income_enabled'] ?? '1') === '1';
-            $levelEnabled = ($settings['level_income_enabled'] ?? '1') === '1';
-        ?>
-        <div class="settings-card">
-            <div class="settings-card-head">
-                <div class="settings-title-block">
-                    <span class="settings-title-ico blue">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
-                    </span>
-                    <div>
-                        <h2>Commission setup</h2>
-                        <p>Configure binary and level income rates.</p>
-                    </div>
-                </div>
-            </div>
-
-            <div class="commission-tabs">
-                <a href="settings.php?tab=commission&sub=binary" class="commission-tab <?= $commissionSub === 'binary' ? 'active' : '' ?>">
-                    <span class="ct-ico">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-                    </span>
-                    Binary Income
-                </a>
-                <a href="settings.php?tab=commission&sub=level" class="commission-tab <?= $commissionSub === 'level' ? 'active' : '' ?>">
-                    <span class="ct-ico">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20V10M18 20V4M6 20v-6"/></svg>
-                    </span>
-                    Level Income
-                </a>
-            </div>
-
-            <?php if ($commissionSub === 'binary'): ?>
-            <form method="post">
-                <input type="hidden" name="tab" value="commission">
-                <input type="hidden" name="sub" value="binary">
-                <div class="settings-section">
-                    <div class="settings-section-head">
-                        <span class="ssh-ico blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg></span>
-                        <h3>Binary Income</h3>
-                    </div>
-                    <label class="settings-toggle">
-                        <input type="checkbox" name="binary_income_enabled" value="1" <?= $binaryEnabled ? 'checked' : '' ?>>
-                        <span class="toggle-ui"></span>
-                        <span class="toggle-text">Enable binary income</span>
-                    </label>
-                    <div class="settings-fields two">
-                        <div class="form-group">
-                            <label>Binary Commission %</label>
-                            <input type="number" step="0.01" min="0" name="binary_commission_percent" value="<?= e($settings['binary_commission_percent'] ?? '10') ?>">
-                            <small class="field-hint">% of matched BV paid as binary</small>
-                        </div>
-                        <div class="form-group">
-                            <label>Referral Commission %</label>
-                            <input type="number" step="0.01" min="0" name="referral_commission_percent" value="<?= e($settings['referral_commission_percent'] ?? '5') ?>">
-                            <small class="field-hint">% of package amount to sponsor on activation</small>
-                        </div>
-                        <div class="form-group">
-                            <label>Matching Commission %</label>
-                            <input type="number" step="0.01" min="0" name="matching_commission_percent" value="<?= e($settings['matching_commission_percent'] ?? '0') ?>">
-                            <small class="field-hint">% of downline binary (gross) to their sponsor</small>
-                        </div>
-                        <div class="form-group">
-                            <label>Pair BV</label>
-                            <input type="number" step="0.01" min="0.01" name="binary_pair_bv" value="<?= e($settings['binary_pair_bv'] ?? '1000') ?>">
-                            <small class="field-hint">BV required on each leg to form 1 pair</small>
-                        </div>
-                        <div class="form-group">
-                            <label>Flush After Pairs</label>
-                            <input type="number" step="1" min="0" name="binary_flush_pairs" value="<?= e($settings['binary_flush_pairs'] ?? '0') ?>">
-                            <small class="field-hint">Max pairs paid per member per closing (0 = unlimited)</small>
-                        </div>
-                    </div>
-                    <div class="settings-info">
-                        <span class="si-ico">i</span>
-                        <p>On activation, package BV is added to placement upline legs. Closing matches equal BV pairs, deducts matched BV (carry leftover), and pays binary + matching. Level income is paid on the sponsor chain at activation.</p>
-                    </div>
-                </div>
-                <div class="settings-card-foot">
-                    <button type="submit" class="btn btn-primary">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:16px;height:16px"><polyline points="20 6 9 17 4 12"/></svg>
-                        Save binary settings
-                    </button>
-                </div>
-            </form>
-            <?php else: ?>
-            <form method="post">
-                <input type="hidden" name="tab" value="commission">
-                <input type="hidden" name="sub" value="level">
-                <div class="settings-section">
-                    <div class="settings-section-head">
-                        <span class="ssh-ico green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20V10M18 20V4M6 20v-6"/></svg></span>
-                        <h3>Level Income</h3>
-                    </div>
-                    <label class="settings-toggle">
-                        <input type="checkbox" name="level_income_enabled" value="1" <?= $levelEnabled ? 'checked' : '' ?>>
-                        <span class="toggle-ui"></span>
-                        <span class="toggle-text">Enable level income</span>
-                    </label>
-                    <div class="settings-fields two" style="margin-bottom:1rem">
-                        <div class="form-group">
-                            <label>Number of Levels</label>
-                            <input type="number" min="1" max="20" name="level_income_levels" id="levelIncomeLevels" value="<?= (int) $levelCount ?>">
-                            <small class="field-hint">Max 20 levels. Save to refresh level fields.</small>
-                        </div>
-                    </div>
-                    <div class="level-income-grid">
-                        <?php for ($i = 1; $i <= $levelCount; $i++):
-                            $pct = $settings['level_' . $i . '_percent'] ?? ($defaultLevelPct[$i] ?? '0');
-                        ?>
-                        <div class="level-income-item">
-                            <div class="level-badge">L<?= $i ?></div>
-                            <div class="form-group">
-                                <label>Level <?= $i ?> %</label>
-                                <input type="number" step="0.01" min="0" name="level_<?= $i ?>_percent" value="<?= e($pct) ?>">
-                            </div>
-                        </div>
-                        <?php endfor; ?>
-                    </div>
-                    <div class="settings-info">
-                        <span class="si-ico">i</span>
-                        <p>Level income is paid up the sponsor chain. Level 1 = direct sponsor, Level 2 = sponsor’s sponsor, and so on.</p>
-                    </div>
-                </div>
-                <div class="settings-card-foot">
-                    <button type="submit" class="btn btn-primary">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:16px;height:16px"><polyline points="20 6 9 17 4 12"/></svg>
-                        Save level settings
-                    </button>
-                </div>
-            </form>
-            <?php endif; ?>
-        </div>
-
-        <?php elseif ($tab === 'withdrawal'):
+        <?php // Commission tab removed — rates are not editable in Client Admin settings.
+        elseif ($tab === 'withdrawal' && feature_module_allowed('withdrawals')):
             $minPayout = number_format((float) ($settings['min_withdrawal'] ?? 500), 2, '.', '');
             $maxPayout = number_format((float) ($settings['max_withdrawal'] ?? 0), 2, '.', '');
             $adminCharges = number_format((float) ($settings['processing_fee_percent'] ?? 1), 2, '.', '');
@@ -955,5 +776,24 @@ $planModeLabel = [
         <?php endif; ?>
     </section>
 </div>
+
+<?php if ($tab === 'general'): ?>
+<script>
+(function () {
+    var input = document.getElementById('companySignatureFile');
+    var preview = document.getElementById('companySignaturePreview');
+    var nameEl = document.getElementById('companySignatureName');
+    if (!input || !preview) return;
+    input.addEventListener('change', function () {
+        var file = input.files && input.files[0];
+        if (!file) return;
+        if (nameEl) nameEl.textContent = file.name;
+        var url = URL.createObjectURL(file);
+        preview.classList.add('has-file');
+        preview.innerHTML = '<img src="' + url + '" alt="Signature preview">';
+    });
+})();
+</script>
+<?php endif; ?>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>

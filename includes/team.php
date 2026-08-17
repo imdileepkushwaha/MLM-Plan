@@ -31,7 +31,7 @@ function team_get_child(PDO $pdo, int $parentId, string $position): ?array
 }
 
 /**
- * Placement downline BFS under $rootId.
+ * Placement downline BFS under $rootId (binary left/right legs).
  * @return array<int, array>
  */
 function team_collect_downline(PDO $pdo, int $rootId, string $leg = 'all'): array
@@ -81,6 +81,115 @@ function team_collect_downline(PDO $pdo, int $rootId, string $leg = 'all'): arra
     return $list;
 }
 
+/**
+ * Sponsor-chain generations (level / unilevel income tree).
+ * @return array<int, array>
+ */
+function team_collect_sponsor_downline(PDO $pdo, int $rootId, int $maxLevel = 50): array
+{
+    $list = [];
+    $maxLevel = max(1, min(100, $maxLevel));
+    $stmtKids = $pdo->prepare("
+        SELECT m.id, m.member_id, m.full_name, m.username, m.phone, m.email, m.status, m.position,
+               m.left_count, m.right_count, m.join_date, m.wallet_balance, m.photo, m.package_id,
+               p.name AS package_name,
+               s.member_id AS sponsor_mid, s.full_name AS sponsor_name
+        FROM members m
+        LEFT JOIN packages p ON p.id = m.package_id
+        LEFT JOIN members s ON s.id = m.sponsor_id
+        WHERE m.sponsor_id = ?
+        ORDER BY m.id ASC
+    ");
+
+    $frontier = [$rootId];
+    $seen = [$rootId => true];
+    $level = 1;
+
+    while ($frontier && $level <= $maxLevel) {
+        $next = [];
+        foreach ($frontier as $sid) {
+            $stmtKids->execute([(int) $sid]);
+            foreach ($stmtKids->fetchAll() as $member) {
+                $id = (int) $member['id'];
+                if (isset($seen[$id])) {
+                    continue;
+                }
+                $seen[$id] = true;
+                $member['level'] = $level;
+                $member['leg'] = 'sponsor';
+                $list[] = $member;
+                $next[] = $id;
+            }
+        }
+        $frontier = $next;
+        $level++;
+    }
+
+    return $list;
+}
+
+/**
+ * Matrix / flexible placement downline (all children under placement_id).
+ * @return array<int, array>
+ */
+function team_collect_matrix_downline(PDO $pdo, int $rootId, int $maxLevel = 50): array
+{
+    $list = [];
+    $maxLevel = max(1, min(100, $maxLevel));
+    $stmtKids = $pdo->prepare("
+        SELECT m.id, m.member_id, m.full_name, m.username, m.phone, m.email, m.status, m.position,
+               m.left_count, m.right_count, m.join_date, m.wallet_balance, m.photo, m.package_id,
+               p.name AS package_name,
+               s.member_id AS sponsor_mid, s.full_name AS sponsor_name
+        FROM members m
+        LEFT JOIN packages p ON p.id = m.package_id
+        LEFT JOIN members s ON s.id = m.sponsor_id
+        WHERE m.placement_id = ?
+        ORDER BY CAST(m.position AS UNSIGNED) ASC, m.id ASC
+    ");
+
+    $frontier = [$rootId];
+    $seen = [$rootId => true];
+    $level = 1;
+
+    while ($frontier && $level <= $maxLevel) {
+        $next = [];
+        foreach ($frontier as $pid) {
+            $stmtKids->execute([(int) $pid]);
+            foreach ($stmtKids->fetchAll() as $member) {
+                $id = (int) $member['id'];
+                if (isset($seen[$id])) {
+                    continue;
+                }
+                $seen[$id] = true;
+                $member['level'] = $level;
+                $member['leg'] = 'matrix';
+                $list[] = $member;
+                $next[] = $id;
+            }
+        }
+        $frontier = $next;
+        $level++;
+    }
+
+    return $list;
+}
+
+/**
+ * Pick downline walker for current plan mode.
+ * @return array{mode:string,rows:array<int,array>}
+ */
+function team_collect_plan_downline(PDO $pdo, int $rootId, string $leg = 'all', int $maxLevel = 50): array
+{
+    if (function_exists('plan_uses_binary') && plan_uses_binary()) {
+        return ['mode' => 'binary', 'rows' => team_collect_downline($pdo, $rootId, $leg)];
+    }
+    if (function_exists('plan_uses_matrix') && plan_uses_matrix()) {
+        return ['mode' => 'matrix', 'rows' => team_collect_matrix_downline($pdo, $rootId, $maxLevel)];
+    }
+    return ['mode' => 'sponsor', 'rows' => team_collect_sponsor_downline($pdo, $rootId, $maxLevel)];
+}
+
 /** Direct referrals by sponsor_id. */
 function team_get_directs(PDO $pdo, int $sponsorId): array
 {
@@ -104,13 +213,14 @@ function team_direct_count(PDO $pdo, int $sponsorId): int
     return (int) $stmt->fetchColumn();
 }
 
-/** True if $candidateId is self or in placement downline of $rootId. */
+/** True if $candidateId is self or in plan-appropriate downline of $rootId. */
 function team_is_under(PDO $pdo, int $rootId, int $candidateId): bool
 {
     if ($rootId === $candidateId) {
         return true;
     }
-    foreach (team_collect_downline($pdo, $rootId, 'all') as $m) {
+    $pack = team_collect_plan_downline($pdo, $rootId, 'all');
+    foreach ($pack['rows'] as $m) {
         if ((int) $m['id'] === $candidateId) {
             return true;
         }

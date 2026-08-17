@@ -409,3 +409,26 @@ CREATE TABLE IF NOT EXISTS package_products (
     INDEX idx_pp_package (package_id),
     INDEX idx_pp_product (product_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Immutable withdrawal payout audit (approve / reject / paid)
+CREATE TABLE IF NOT EXISTS withdrawal_payout_logs (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    withdrawal_id INT UNSIGNED NOT NULL,
+    member_id INT UNSIGNED NOT NULL,
+    admin_id INT UNSIGNED NULL,
+    event_type VARCHAR(20) NOT NULL,
+    gross_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+    net_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+    tds_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+    fee_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+    other_deduction DECIMAL(12,2) NOT NULL DEFAULT 0,
+    payment_method VARCHAR(80) NULL,
+    account_details TEXT NULL,
+    payout_ref VARCHAR(120) NULL,
+    admin_note TEXT NULL,
+    ip_address VARCHAR(45) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_wpl_withdrawal (withdrawal_id),
+    KEY idx_wpl_member (member_id),
+    KEY idx_wpl_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

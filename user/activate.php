@@ -50,7 +50,7 @@ $supportPhone = setting('contact_phone', '');
 
 $allowedPayModes = feature_activation_pay_modes();
 if ($allowedPayModes === []) {
-    flash('error', 'No activation method is enabled. Contact support / Super Admin.');
+    flash('error', 'No activation method is enabled. Please contact support.');
     header('Location: index.php');
     exit;
 }
@@ -191,16 +191,28 @@ $selectedProductCount = $selectedPkg
 $selectedProductQty = $selectedPkg
     ? (int) (($pkgProductCounts[(int) $selectedPkg['id']]['total_qty'] ?? 0))
     : 0;
+
+$payLabels = [];
+if (in_array('tpin', $allowedPayModes, true)) {
+    $payLabels[] = 'T-Pin (instant)';
+}
+if (in_array('wallet', $allowedPayModes, true)) {
+    $payLabels[] = 'Topup Wallet (instant)';
+}
+if (in_array('utr', $allowedPayModes, true)) {
+    $payLabels[] = 'UTR / slip (admin approval)';
+}
+$payHelp = $payLabels ? implode(' or ', $payLabels) : 'an enabled payment method';
 ?>
 <div class="up-page-head">
     <div>
         <h1><?= $isUpgrade ? 'Upgrade Plan' : 'Activate Account' ?></h1>
-        <p><?= $isUpgrade
-            ? 'Upgrade with T-Pin (instant) or pay the difference via UTR/slip for admin approval.'
-            : 'Activate with T-Pin (instant) or pay via UTR/slip for admin approval.' ?></p>
+        <p><?= $isUpgrade ? 'Upgrade with ' : 'Activate with ' ?><?= e($payHelp) ?>.</p>
     </div>
     <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+        <?php if (in_array('tpin', $allowedPayModes, true)): ?>
         <a href="tpin.php" class="up-btn up-btn-outline">My T-Pins</a>
+        <?php endif; ?>
         <a href="index.php" class="up-btn up-btn-outline">Back to Dashboard</a>
     </div>
 </div>
@@ -259,10 +271,10 @@ $selectedProductQty = $selectedPkg
     <div class="actx-hero-copy">
         <span class="actx-kicker"><?= $isUpgrade ? 'Plan upgrade' : 'Membership activation' ?></span>
         <h2><?= $isUpgrade ? 'Upgrade to a higher plan' : 'Choose your growth plan' ?></h2>
-        <p>Use a <strong>T-Pin</strong> for instant <?= $isUpgrade ? 'upgrade' : 'activation' ?>, or pay by bank/UPI and submit UTR for admin approval.</p>
+        <p>Pay with <?= e($payHelp) ?>.</p>
         <ol class="actx-steps">
             <li class="is-on"><span>1</span> Select package</li>
-            <li class="<?= $stepPay ? 'is-on' : '' ?>"><span>2</span> T-Pin or UTR</li>
+            <li class="<?= $stepPay ? 'is-on' : '' ?>"><span>2</span> Payment</li>
             <li><span>3</span> <?= $isUpgrade ? 'Upgraded' : 'Activated' ?></li>
         </ol>
     </div>
@@ -306,7 +318,7 @@ $selectedProductQty = $selectedPkg
         <h3><?= $isUpgrade ? 'Upgrade packages' : 'Available packages' ?></h3>
         <p><?= $isUpgrade
             ? 'Only higher plans are listed. T-Pin must match the selected package.'
-            : 'Select a package, then choose T-Pin or UTR payment below.' ?></p>
+            : 'Select a package, then choose payment below.' ?></p>
     </div>
 
     <?php if ($isUpgrade && $currentPkg): ?>
@@ -384,7 +396,7 @@ $selectedProductQty = $selectedPkg
                 <div>
                     <span class="actx-pay-kicker">Step 2 · Payment mode</span>
                     <h3>How do you want to <?= $isUpgrade ? 'upgrade' : 'activate' ?>?</h3>
-                    <p>T-Pin or Topup Wallet activates instantly. UTR/slip goes to admin for approval.</p>
+                    <p><?= e($payHelp) ?>.</p>
                 </div>
             </div>
         </div>

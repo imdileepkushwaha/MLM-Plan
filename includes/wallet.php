@@ -37,6 +37,20 @@ function wallet_types(): array
     ];
 }
 
+/** Wallet cards / nav types enabled for this install. */
+function wallet_types_enabled(): array
+{
+    $all = wallet_types();
+    $out = ['income' => $all['income']];
+    if (function_exists('feature_module_allowed') && feature_module_allowed('wallet_topup')) {
+        $out['topup'] = $all['topup'];
+    }
+    if (function_exists('feature_module_allowed') && feature_module_allowed('products')) {
+        $out['shopping'] = $all['shopping'];
+    }
+    return $out;
+}
+
 function wallet_ensure_schema(PDO $pdo): void
 {
     static $done = false;

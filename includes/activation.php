@@ -42,7 +42,11 @@ function activation_pay_referral(PDO $pdo, int $sponsorId, int $fromMemberId, st
  */
 function activation_apply(PDO $pdo, array $user, int $packageId): array
 {
-    if (!feature_enabled('feature_package_enabled') && !feature_enabled('feature_tpin_enabled')) {
+    if (
+        !feature_enabled('feature_package_enabled')
+        && !feature_enabled('feature_tpin_enabled')
+        && !feature_enabled('feature_product_activates_package')
+    ) {
         return ['ok' => false, 'error' => 'Package activation is disabled for this client.'];
     }
     if (!empty($user['package_id'])) {

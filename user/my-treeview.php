@@ -39,6 +39,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'tree_
     $parentId = (int) ($_POST['parent_id'] ?? 0);
     $position = strtolower(trim($_POST['position'] ?? ''));
     $pinCode = trim((string) ($_POST['tpin_code'] ?? ''));
+    if (!feature_module_allowed('tpin')) {
+        $pinCode = '';
+    }
     $returnRoot = (int) ($_POST['return_root'] ?? $uid);
     if ($returnRoot <= 0 || !team_is_under($pdo, $uid, $returnRoot)) {
         $returnRoot = $uid;
@@ -193,11 +196,12 @@ if ($root && !empty($root['placement_id'])) {
 require_once __DIR__ . '/includes/header.php';
 $flash = get_flash();
 $reopenModal = $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'tree_add' && $formErrors;
+$featTpin = feature_module_allowed('tpin');
 ?>
 <div class="up-page-head">
     <div>
         <h1>My Treeview</h1>
-        <p>Binary placement tree — 4 levels. Click Vacant to add &amp; optionally activate with your T-Pin.</p>
+        <p>Binary placement tree — 4 levels. Click Vacant to add a member<?= $featTpin ? ' (optional T-Pin activate)' : '' ?>.</p>
     </div>
     <div class="team-head-actions">
         <?php if (!$isSelf): ?>
@@ -238,6 +242,7 @@ $reopenModal = $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '')
             <strong><?= (int) $root['right_count'] ?></strong>
         </div>
     </article>
+    <?php if ($featTpin): ?>
     <article class="team-stat g-blue">
         <span class="team-stat-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg></span>
         <div>
@@ -246,6 +251,7 @@ $reopenModal = $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '')
             <small>Unused in wallet</small>
         </div>
     </article>
+    <?php endif; ?>
 </div>
 <?php endif; ?>
 
@@ -280,7 +286,7 @@ $reopenModal = $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '')
             <?php endif; ?>
         </div>
     </div>
-    <p class="ut-tree-tip">Tip: click <strong>+ Add</strong> on a vacant slot to register a member. Add a T-Pin to activate instantly.</p>
+    <p class="ut-tree-tip">Tip: click <strong>+ Add</strong> on a vacant slot to register a member<?= $featTpin ? '. You can optionally activate with a T-Pin' : '' ?>.</p>
 </section>
 
 <div class="ut-modal" id="utAddModal" hidden>
@@ -324,6 +330,7 @@ $reopenModal = $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '')
                     <label for="ut_password">Password *</label>
                     <input type="password" name="password" id="ut_password" required minlength="6" autocomplete="new-password">
                 </div>
+                <?php if ($featTpin): ?>
                 <div class="form-group">
                     <label for="ut_tpin">T-Pin (optional activate)</label>
                     <?php if ($myPins): ?>
@@ -340,6 +347,7 @@ $reopenModal = $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '')
                         <small class="ut-field-hint">You have no unused T-Pins. Member can be registered without activation.</small>
                     <?php endif; ?>
                 </div>
+                <?php endif; ?>
             </div>
 
             <div class="ut-modal-foot">

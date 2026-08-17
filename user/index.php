@@ -4,6 +4,14 @@ require_once __DIR__ . '/../includes/closing.php';
 require_once __DIR__ . '/../includes/activation.php';
 require_once __DIR__ . '/includes/header.php';
 
+$showBinaryUi = plan_uses_binary();
+$showWithdrawUi = feature_module_allowed('withdrawals');
+$featActivations = feature_module_allowed('activations');
+$featProducts = feature_module_allowed('products');
+$productActivates = feature_enabled('feature_product_activates_package');
+$teamTreeHref = $showBinaryUi ? 'my-treeview.php' : (plan_uses_matrix() ? 'matrix-tree.php' : 'level-tree.php');
+$teamTreeLabel = $showBinaryUi ? 'Binary tree' : (plan_uses_matrix() ? 'Matrix tree' : 'Level tree');
+
 $directCount = 0;
 try {
     $ds = $pdo->prepare('SELECT COUNT(*) FROM members WHERE sponsor_id = ?');
@@ -15,17 +23,31 @@ try {
 
 $refBase = rtrim(APP_URL, '/') . '/user/register.php';
 $memberCode = (string) ($user['member_id'] ?? '');
-$referralLeft = $refBase . '?ref=' . rawurlencode($memberCode) . '&pos=left';
-$referralRight = $refBase . '?ref=' . rawurlencode($memberCode) . '&pos=right';
+$referralSponsor = $refBase . '?ref=' . rawurlencode($memberCode);
+$referralLeft = $referralSponsor . '&pos=left';
+$referralRight = $referralSponsor . '&pos=right';
 $waLeftText = 'Join with my Left referral link (' . $memberCode . '): ' . $referralLeft;
 $waRightText = 'Join with my Right referral link (' . $memberCode . '): ' . $referralRight;
+$waSponsorText = 'Join with my referral link (' . $memberCode . '): ' . $referralSponsor;
 $waLeftUrl = 'https://wa.me/?text=' . rawurlencode($waLeftText);
 $waRightUrl = 'https://wa.me/?text=' . rawurlencode($waRightText);
+$waSponsorUrl = 'https://wa.me/?text=' . rawurlencode($waSponsorText);
 $needsActivation = empty($user['package_id']);
-$actPending = activation_pending_request($pdo, (int) $user['id']);
-$canUpgrade = !$needsActivation && activation_can_upgrade($pdo, $user);
+$actPending = $featActivations ? activation_pending_request($pdo, (int) $user['id']) : null;
+$canUpgrade = $featActivations && !$needsActivation && activation_can_upgrade($pdo, $user);
 $upgradePending = $actPending && (($actPending['request_type'] ?? '') === 'upgrade');
 $showUpgradeCta = $canUpgrade || $upgradePending;
+$showActivateCta = $needsActivation && $featActivations;
+$showShopActivateHint = $needsActivation && !$featActivations && $productActivates && $featProducts;
+$productMinActivate = product_activate_min_amount();
+$productOnly = feature_product_only_activation();
+$shopActivateCopy = $productOnly
+    ? ($productMinActivate > 0
+        ? 'Buy a product priced at least ' . strip_tags(currency($productMinActivate)) . ' to activate your ID.'
+        : 'Buy any product from the shop to activate your ID.')
+    : ($productMinActivate > 0
+        ? 'Buy a product priced at least ' . strip_tags(currency($productMinActivate)) . ' (with a linked package) to activate your ID.'
+        : 'Buy an eligible product from the shop to activate your package and unlock earnings.');
 
 $leftBv = (float) ($user['left_bv'] ?? 0);
 $rightBv = (float) ($user['right_bv'] ?? 0);
@@ -52,8 +74,10 @@ try {
         <h1>Member Dashboard</h1>
         <p>Overview of your wallet, team and account status.</p>
     </div>
-    <?php if ($needsActivation): ?>
+    <?php if ($showActivateCta): ?>
         <a href="activate.php" class="up-btn up-btn-primary"><?= $actPending ? 'View Request' : 'Activate Account' ?></a>
+    <?php elseif ($showShopActivateHint): ?>
+        <a href="purchase-product.php" class="up-btn up-btn-primary">Shop to Activate</a>
     <?php elseif ($showUpgradeCta): ?>
         <a href="activate.php" class="up-btn up-btn-primary"><?= $upgradePending ? 'View Upgrade' : 'Upgrade Plan' ?></a>
     <?php else: ?>
@@ -61,14 +85,14 @@ try {
     <?php endif; ?>
 </div>
 
-<?php if ($needsActivation): ?>
+<?php if ($showActivateCta): ?>
 <section class="up-activate-banner">
     <div class="up-activate-copy">
         <span class="up-activate-kicker"><?= $actPending ? 'Pending approval' : 'Action required' ?></span>
         <h2><?= $actPending ? 'Activation under review' : 'Activate your account' ?></h2>
         <p><?= $actPending
-            ? 'Your payment proof is with admin. You will go live once the UTR is verified.'
-            : 'Pay for a package, submit your UTR, and unlock team &amp; earnings features after admin approval.' ?></p>
+            ? 'Your payment proof is with admin. You will go live once it is verified.'
+            : 'Choose an enabled payment method on the activate page to unlock team and earnings features.' ?></p>
         <div class="up-activate-actions">
             <a href="activate.php" class="up-btn up-btn-primary"><?= $actPending ? 'View Request' : 'Activate Now' ?></a>
             <a href="profile.php" class="up-btn up-btn-outline up-activate-ghost">View Profile</a>
@@ -80,6 +104,25 @@ try {
         </span>
         <strong><?= $actPending ? 'Pending' : 'Inactive' ?></strong>
         <small><?= $actPending ? 'Awaiting admin' : 'No package assigned' ?></small>
+    </div>
+</section>
+<?php elseif ($showShopActivateHint): ?>
+<section class="up-activate-banner">
+    <div class="up-activate-copy">
+        <span class="up-activate-kicker">Action required</span>
+        <h2>Activate via product purchase</h2>
+        <p><?= e($shopActivateCopy) ?></p>
+        <div class="up-activate-actions">
+            <a href="purchase-product.php" class="up-btn up-btn-primary">Open Shop</a>
+            <a href="profile.php" class="up-btn up-btn-outline up-activate-ghost">View Profile</a>
+        </div>
+    </div>
+    <div class="up-activate-visual" aria-hidden="true">
+        <span class="up-activate-ico">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 6h15l-1.5 9h-12z"/><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M6 6L5 3H2"/></svg>
+        </span>
+        <strong>Inactive</strong>
+        <small>Shop to activate</small>
     </div>
 </section>
 <?php elseif ($showUpgradeCta): ?>
@@ -145,9 +188,15 @@ try {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><path d="M12 7v4M12 11L5 17M12 11l7 6"/></svg>
             </span>
             <div class="up-stat-copy">
+                <?php if ($showBinaryUi): ?>
                 <div class="up-stat-label">Left / Right</div>
                 <div class="up-stat-value"><?= (int) $user['left_count'] ?> / <?= (int) $user['right_count'] ?></div>
                 <div class="up-stat-foot"><span>team</span> Binary count</div>
+                <?php else: ?>
+                <div class="up-stat-label">Direct Team</div>
+                <div class="up-stat-value"><?= (int) $directCount ?></div>
+                <div class="up-stat-foot"><span>team</span> Referrals</div>
+                <?php endif; ?>
             </div>
         </div>
     </article>
@@ -163,8 +212,10 @@ try {
                 <div class="up-stat-label">Package</div>
                 <div class="up-stat-value is-sm"><?= e($user['package_name'] ?? ($needsActivation ? 'Not activated' : '—')) ?></div>
                 <div class="up-stat-foot">
-                    <?php if ($needsActivation): ?>
+                    <?php if ($showActivateCta): ?>
                         <a href="activate.php" style="color:inherit;font-weight:800;text-decoration:underline"><?= $actPending ? 'Pending →' : 'Activate →' ?></a>
+                    <?php elseif ($showShopActivateHint): ?>
+                        <a href="purchase-product.php" style="color:inherit;font-weight:800;text-decoration:underline">Shop →</a>
                     <?php elseif ($showUpgradeCta): ?>
                         <a href="activate.php" style="color:inherit;font-weight:800;text-decoration:underline"><?= $upgradePending ? 'Pending →' : 'Upgrade →' ?></a>
                     <?php else: ?>
@@ -176,6 +227,7 @@ try {
     </article>
 </div>
 
+<?php if ($showBinaryUi): ?>
 <div class="up-stats up-stats-bv">
     <article class="up-stat g-mint">
         <div class="up-stat-inner">
@@ -226,13 +278,16 @@ try {
         </div>
     </article>
 </div>
+<?php endif; ?>
 
 <section class="up-card up-panel-card up-referral" aria-labelledby="referralTitle">
     <div class="up-panel-head is-coral">
         <div>
             <span class="up-panel-kicker">Grow your team</span>
             <h2 id="referralTitle">Referral Links</h2>
-            <p>Share Left / Right placement links under your ID <strong><?= e($memberCode) ?></strong>.</p>
+            <p><?= $showBinaryUi
+                ? 'Share Left / Right placement links under your ID <strong>' . e($memberCode) . '</strong>.'
+                : 'Share your sponsor link under your ID <strong>' . e($memberCode) . '</strong>.' ?></p>
         </div>
         <div class="up-referral-id">
             <span>Your ID</span>
@@ -241,6 +296,7 @@ try {
     </div>
 
     <div class="up-referral-body">
+        <?php if ($showBinaryUi): ?>
         <div class="up-referral-grid">
             <article class="up-ref-card up-ref-left">
                 <div class="up-ref-card-top">
@@ -290,6 +346,30 @@ try {
                 </div>
             </article>
         </div>
+        <?php else: ?>
+        <div class="up-referral-grid" style="grid-template-columns:1fr">
+            <article class="up-ref-card">
+                <div class="up-ref-card-top">
+                    <div class="up-ref-title">
+                        <span class="up-ref-badge">Sponsor Link</span>
+                    </div>
+                    <span class="up-ref-count"><?= (int) $directCount ?> directs</span>
+                </div>
+                <p class="up-ref-desc">Share this link so new members join under your sponsorship.</p>
+                <div class="up-ref-field">
+                    <input type="text" readonly value="<?= e($referralSponsor) ?>" id="refLinkSponsor" aria-label="Sponsor referral link">
+                    <button type="button" class="up-ref-copy" data-copy="#refLinkSponsor">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                        <span>Copy</span>
+                    </button>
+                    <a href="<?= e($waSponsorUrl) ?>" class="up-ref-wa" target="_blank" rel="noopener noreferrer" title="Share on WhatsApp">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.435 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                        <span>WhatsApp</span>
+                    </a>
+                </div>
+            </article>
+        </div>
+        <?php endif; ?>
     </div>
 </section>
 
@@ -328,21 +408,35 @@ try {
                 <strong>Earnings</strong>
                 <small>Income view</small>
             </a>
-            <a href="my-treeview.php" class="up-q-tile c5">
+            <a href="<?= e($teamTreeHref) ?>" class="up-q-tile c5">
                 <span class="up-quick-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><path d="M12 7v4M12 11L5 17M12 11l7 6"/></svg></span>
                 <strong>Team</strong>
-                <small>Binary tree</small>
+                <small><?= e($teamTreeLabel) ?></small>
             </a>
+            <?php if ($showWithdrawUi): ?>
             <a href="withdrawal-fund.php" class="up-q-tile c6">
                 <span class="up-quick-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg></span>
                 <strong>Withdraw</strong>
                 <small>Request payout</small>
             </a>
-            <?php if ($needsActivation): ?>
+            <?php else: ?>
+            <a href="my-downline.php" class="up-q-tile c6">
+                <span class="up-quick-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><path d="M12 7v4M12 11L5 17M12 11l7 6"/></svg></span>
+                <strong>Downline</strong>
+                <small>View team</small>
+            </a>
+            <?php endif; ?>
+            <?php if ($showActivateCta): ?>
             <a href="activate.php" class="up-q-tile c7">
                 <span class="up-quick-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></span>
                 <strong>Activate</strong>
                 <small><?= $actPending ? 'View request' : 'Pay &amp; submit' ?></small>
+            </a>
+            <?php elseif ($showShopActivateHint): ?>
+            <a href="purchase-product.php" class="up-q-tile c7">
+                <span class="up-quick-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 6h15l-1.5 9h-12z"/><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M6 6L5 3H2"/></svg></span>
+                <strong>Shop</strong>
+                <small>Buy to activate</small>
             </a>
             <?php elseif ($showUpgradeCta): ?>
             <a href="activate.php" class="up-q-tile c7">
@@ -405,8 +499,10 @@ try {
                     <span class="badge is-date"><?= $user['join_date'] ? date('d M Y', strtotime($user['join_date'])) : '—' ?></span>
                 </div>
             </div>
-            <?php if ($needsActivation): ?>
+            <?php if ($showActivateCta): ?>
                 <a href="activate.php" class="up-btn up-btn-primary up-btn-block">Activate Account →</a>
+            <?php elseif ($showShopActivateHint): ?>
+                <a href="purchase-product.php" class="up-btn up-btn-primary up-btn-block">Shop to Activate →</a>
             <?php elseif ($showUpgradeCta): ?>
                 <a href="activate.php" class="up-btn up-btn-primary up-btn-block"><?= $upgradePending ? 'View Upgrade →' : 'Upgrade Plan →' ?></a>
             <?php else: ?>

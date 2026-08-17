@@ -5,10 +5,12 @@
 require_admin();
 feature_guard_admin_page();
 $company = setting('company_name', 'Binary MLM');
+$favUrl = company_favicon_url();
 $currentPage = basename($_SERVER['PHP_SELF'], '.php');
 $adminName = $_SESSION['admin_name'] ?? 'Admin';
 
 $featBinary = plan_uses_binary();
+$featMatrix = plan_uses_matrix();
 $featLevel = plan_uses_level();
 $featPackages = feature_module_allowed('packages');
 $featProducts = feature_module_allowed('products');
@@ -29,14 +31,14 @@ $utilityOpen = in_array($currentPage, $utilityPages, true);
 
 $memberPages = [
     'members', 'member-view', 'member-add', 'member-edit',
-    'approve-kyc', 'tree-view', 'binary-tree', 'downline',
+    'approve-kyc', 'tree-view', 'binary-tree', 'matrix-tree', 'level-tree', 'downline',
 ];
 $membersOpen = in_array($currentPage, $memberPages, true);
 
 $productPages = [
     'product-categories', 'product-subcategories', 'product-sizes', 'product-colors',
     'subcategory-settings', 'product-add', 'product-form', 'product-details', 'product-status',
-    'stock-report', 'vendors', 'stock-purchase', 'purchase-details', 'commodity-prices',
+    'product-orders', 'stock-report', 'vendors', 'stock-purchase', 'purchase-details', 'commodity-prices',
 ];
 $productOpen = in_array($currentPage, $productPages, true);
 
@@ -105,6 +107,7 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e($pageTitle ?? 'Admin') ?> | <?= e($company) ?></title>
+    <?php if ($favUrl): ?><link rel="icon" href="<?= e($favUrl) ?>"><?php endif; ?>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../assets/css/admin.css?v=<?= (int) @filemtime(__DIR__ . '/../assets/css/admin.css') ?>">
@@ -113,7 +116,15 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
 <div class="app">
     <aside class="sidebar" id="sidebar">
         <div class="sidebar-brand">
-            <div class="brand-text"><?= e($company) ?></div>
+            <div class="admin-brand-row">
+                <span class="admin-brand-mark" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                </span>
+                <div class="admin-brand-copy">
+                    <div class="brand-text">Client Admin</div>
+                    <span class="admin-brand-sub">Client control</span>
+                </div>
+            </div>
             <div class="browse-card">
                 <div class="browse-card-text">
                     <span class="browse-label">Browse</span>
@@ -152,6 +163,12 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
                         <?php endif; ?>
                         <?php if ($featBinary): ?>
                         <a href="tree-view.php" class="<?= in_array($currentPage, ['tree-view', 'binary-tree'], true) ? 'active' : '' ?>"><span class="dot"></span>Tree View</a>
+                        <?php endif; ?>
+                        <?php if ($featMatrix): ?>
+                        <a href="matrix-tree.php" class="<?= $currentPage === 'matrix-tree' ? 'active' : '' ?>"><span class="dot"></span>Matrix Tree</a>
+                        <?php endif; ?>
+                        <?php if ($featLevel): ?>
+                        <a href="level-tree.php" class="<?= $currentPage === 'level-tree' ? 'active' : '' ?>"><span class="dot"></span>Level Tree</a>
                         <?php endif; ?>
                         <a href="downline.php" class="<?= $currentPage === 'downline' ? 'active' : '' ?>"><span class="dot"></span>Downline</a>
                     </div>
@@ -207,6 +224,7 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
                         <a href="product-form.php" class="<?= $currentPage === 'product-form' ? 'active' : '' ?>"><span class="dot"></span>Add Product</a>
                         <a href="product-add.php" style="display: none;" class="<?= $currentPage === 'product-add' ? 'active' : '' ?>"><span class="dot"></span>Quick Add Product</a>
                         <a href="product-details.php" class="<?= $currentPage === 'product-details' ? 'active' : '' ?>"><span class="dot"></span>Product Details</a>
+                        <a href="product-orders.php" class="<?= $currentPage === 'product-orders' ? 'active' : '' ?>"><span class="dot"></span>Product Orders</a>
                         <a href="product-status.php" style="display: none;" class="<?= $currentPage === 'product-status' ? 'active' : '' ?>"><span class="dot"></span>Change Status</a>
                         <a href="stock-report.php" class="<?= $currentPage === 'stock-report' ? 'active' : '' ?>"><span class="dot"></span>Stock Report</a>
                         <a href="vendors.php" class="<?= $currentPage === 'vendors' ? 'active' : '' ?>"><span class="dot"></span>Vendor Master</a>
@@ -329,6 +347,9 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
                         <a href="report-binary-closing.php" class="<?= $currentPage === 'report-binary-closing' ? 'active' : '' ?>"><span class="dot"></span>Binary Closing</a>
                         <?php endif; ?>
                         <a href="tds-report.php" class="<?= $currentPage === 'tds-report' ? 'active' : '' ?>"><span class="dot"></span>TDS Report</a>
+                        <?php if ($featProducts): ?>
+                        <a href="product-orders.php" class="<?= $currentPage === 'product-orders' ? 'active' : '' ?>"><span class="dot"></span>Product Orders</a>
+                        <?php endif; ?>
                     </div>
                 </div>
                 <?php endif; ?>
@@ -402,7 +423,11 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
                         <?php else: ?>
                         <div class="dropdown-empty">No new notifications</div>
                         <?php endif; ?>
+                        <?php if ($featWalletTopup): ?>
                         <a href="wallet-topup-requests.php?status=pending" class="dropdown-foot">View topup requests</a>
+                        <?php elseif ($featWithdrawals): ?>
+                        <a href="withdrawals.php?status=pending" class="dropdown-foot">View withdrawals</a>
+                        <?php endif; ?>
                     </div>
                 </div>
 
@@ -430,10 +455,12 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
                             Settings
                         </a>
+                        <?php if ($featReports): ?>
                         <a href="reports.php" class="dropdown-item">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
                             Reports
                         </a>
+                        <?php endif; ?>
                         <div class="dropdown-divider"></div>
                         <a href="logout.php" class="dropdown-item danger">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>

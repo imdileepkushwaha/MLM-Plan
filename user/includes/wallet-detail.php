@@ -6,7 +6,8 @@
 require_once __DIR__ . '/../../includes/wallet.php';
 
 $types = wallet_types();
-if (empty($walletKey) || !isset($types[$walletKey])) {
+$enabled = wallet_types_enabled();
+if (empty($walletKey) || !isset($types[$walletKey]) || !isset($enabled[$walletKey])) {
     header('Location: wallet.php');
     exit;
 }
@@ -19,6 +20,7 @@ wallet_ensure_schema($pdo);
 $uid = (int) $user['id'];
 $balances = wallet_get_balances($pdo, $uid);
 $balance = (float) ($balances[$walletKey] ?? 0);
+$showWithdrawUi = feature_module_allowed('withdrawals');
 
 $page = max(1, (int) ($_GET['page'] ?? 1));
 $perPage = 15;
@@ -58,7 +60,7 @@ $quickTone = ['income' => 'green', 'topup' => 'blue', 'shopping' => 'purple'];
     <div class="up-head-actions">
         <a href="wallet.php" class="up-btn up-btn-outline">All Wallets</a>
         <a href="wallet-transfer.php" class="up-btn up-btn-primary">Transfer</a>
-        <?php if ($walletKey === 'income'): ?>
+        <?php if ($walletKey === 'income' && $showWithdrawUi): ?>
             <a href="withdrawal-fund.php" class="up-btn up-btn-outline">Withdraw</a>
         <?php endif; ?>
     </div>

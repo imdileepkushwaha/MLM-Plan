@@ -13,19 +13,37 @@ if (!in_array($sub, ['binary', 'level'], true)) {
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $postSub = $_POST['sub'] ?? 'binary';
+    $mode = plan_mode();
+    $before = feature_audit_snapshot($pdo);
+
     if ($postSub === 'binary') {
         foreach (['binary_commission_percent', 'referral_commission_percent', 'matching_commission_percent', 'binary_flush_pairs', 'binary_pair_bv', 'daily_closing_admin_charge'] as $key) {
             if (isset($_POST[$key])) {
                 $saveSetting($pdo, $key, trim((string) $_POST[$key]));
             }
         }
-        $saveSetting($pdo, 'binary_income_enabled', isset($_POST['binary_income_enabled']) ? '1' : '0');
-        $saveSetting($pdo, 'feature_binary_income', isset($_POST['binary_income_enabled']) ? '1' : '0');
+        $wantBinary = isset($_POST['binary_income_enabled']);
+        // Align with plan_mode: never enable binary income on level/unilevel/matrix
+        if (in_array($mode, ['level', 'unilevel', 'matrix'], true)) {
+            $wantBinary = false;
+        } elseif ($mode === 'binary') {
+            $wantBinary = true;
+        }
+        $saveSetting($pdo, 'binary_income_enabled', $wantBinary ? '1' : '0');
+        $saveSetting($pdo, 'feature_binary_income', $wantBinary ? '1' : '0');
+        if (!$wantBinary && in_array($mode, ['level', 'unilevel', 'matrix'], true)) {
+            $saveSetting($pdo, 'feature_matching_income', '0');
+        }
     } else {
         $levelCount = max(1, min(20, (int) ($_POST['level_income_levels'] ?? 10)));
         $saveSetting($pdo, 'level_income_levels', (string) $levelCount);
-        $saveSetting($pdo, 'level_income_enabled', isset($_POST['level_income_enabled']) ? '1' : '0');
-        $saveSetting($pdo, 'feature_level_income', isset($_POST['level_income_enabled']) ? '1' : '0');
+        $wantLevel = isset($_POST['level_income_enabled']);
+        // Level/unilevel/matrix require level income; binary-only may leave it off
+        if (in_array($mode, ['level', 'unilevel', 'matrix'], true)) {
+            $wantLevel = true;
+        }
+        $saveSetting($pdo, 'level_income_enabled', $wantLevel ? '1' : '0');
+        $saveSetting($pdo, 'feature_level_income', $wantLevel ? '1' : '0');
         for ($i = 1; $i <= $levelCount; $i++) {
             $key = 'level_' . $i . '_percent';
             $val = isset($_POST[$key]) ? trim((string) $_POST[$key]) : '0';
@@ -36,7 +54,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     clear_setting_cache();
-    log_superadmin_activity('commission_save', 'Updated ' . $postSub . ' rates');
+    $auditKeys = null;
+    if ($postSub === 'binary') {
+        $auditKeys = [
+            'binary_commission_percent', 'referral_commission_percent', 'matching_commission_percent',
+            'binary_flush_pairs', 'binary_pair_bv', 'daily_closing_admin_charge',
+            'binary_income_enabled', 'feature_binary_income', 'feature_matching_income',
+        ];
+    } else {
+        $levelCount = max(1, min(20, (int) ($_POST['level_income_levels'] ?? 10)));
+        $auditKeys = ['level_income_levels', 'level_income_enabled', 'feature_level_income'];
+        for ($i = 1; $i <= $levelCount; $i++) {
+            $auditKeys[] = 'level_' . $i . '_percent';
+        }
+    }
+    feature_audit_log($pdo, 'commission_save', 'Updated ' . $postSub . ' rates', $before, $auditKeys);
     flash('success', 'Commission rates saved.');
     header('Location: commission.php?sub=' . urlencode($postSub));
     exit;

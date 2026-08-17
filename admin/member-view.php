@@ -5,6 +5,12 @@ require_once __DIR__ . '/../includes/closing.php';
 require_once __DIR__ . '/../includes/withdrawal.php';
 $pageTitle = 'Member Details';
 
+$showBinary = plan_uses_binary();
+$showMatrix = plan_uses_matrix();
+$showPackages = feature_module_allowed('packages')
+    || feature_enabled('feature_tpin_enabled')
+    || feature_enabled('feature_product_activates_package');
+$productOnlyMode = feature_product_only_activation();
 $id = (int) ($_GET['id'] ?? 0);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'activate_package') {
@@ -17,11 +23,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'activ
         header('Location: members.php');
         exit;
     }
+
+    // Product Only: admin can activate by amount → auto value package
+    if ($productOnlyMode && $pkgId < 1) {
+        $amt = round((float) ($_POST['activate_amount'] ?? 0), 2);
+        if ($amt <= 0) {
+            $amt = product_activate_min_amount();
+        }
+        if ($amt <= 0) {
+            flash('error', 'Enter an activation amount greater than zero.');
+            header('Location: member-view.php?id=' . $id);
+            exit;
+        }
+        require_once __DIR__ . '/../includes/product_orders.php';
+        $autoPkg = product_orders_ensure_value_package($pdo, $amt, $amt);
+        if (!$autoPkg) {
+            flash('error', 'Could not prepare activation package.');
+            header('Location: member-view.php?id=' . $id);
+            exit;
+        }
+        $pkgId = (int) $autoPkg['id'];
+    }
+
     $result = activation_apply($pdo, $mem, $pkgId);
     if ($result['ok']) {
         $pkgName = $result['package']['name'] ?? 'package';
         log_activity('member_activate_package', "Activated member #{$id} with {$pkgName}");
-        flash('success', 'Package activated. Referral, BV, and level income processed.');
+        flash('success', 'Package activated. Referral and plan income processed.');
     } else {
         flash('error', $result['error'] ?? 'Activation failed.');
     }
@@ -55,17 +83,22 @@ if (empty($member['package_id'])) {
     $packages = activation_packages($pdo);
 }
 
-$pairBv = closing_pair_bv();
-$flush = max(0, (int) setting('binary_flush_pairs', '0'));
-$openMatch = closing_compute_match((float) $member['left_bv'], (float) $member['right_bv'], $pairBv, $flush);
+$openMatch = ['pairs' => 0, 'matched_bv' => 0];
+$left = null;
+$right = null;
+if ($showBinary) {
+    $pairBv = closing_pair_bv();
+    $flush = max(0, (int) setting('binary_flush_pairs', '0'));
+    $openMatch = closing_compute_match((float) $member['left_bv'], (float) $member['right_bv'], $pairBv, $flush);
 
-$leftChild = $pdo->prepare('SELECT * FROM members WHERE placement_id = ? AND position = ?');
-$leftChild->execute([$id, 'left']);
-$left = $leftChild->fetch();
+    $leftChild = $pdo->prepare('SELECT * FROM members WHERE placement_id = ? AND position = ?');
+    $leftChild->execute([$id, 'left']);
+    $left = $leftChild->fetch();
 
-$rightChild = $pdo->prepare('SELECT * FROM members WHERE placement_id = ? AND position = ?');
-$rightChild->execute([$id, 'right']);
-$right = $rightChild->fetch();
+    $rightChild = $pdo->prepare('SELECT * FROM members WHERE placement_id = ? AND position = ?');
+    $rightChild->execute([$id, 'right']);
+    $right = $rightChild->fetch();
+}
 
 $comms = $pdo->prepare('SELECT * FROM commissions WHERE member_id = ? ORDER BY created_at DESC LIMIT 20');
 $comms->execute([$id]);
@@ -80,6 +113,8 @@ $ct->execute([$id]);
 $commTotal = (float) $ct->fetchColumn();
 
 require_once __DIR__ . '/../includes/header.php';
+
+$effectiveStatus = member_effective_status($member);
 ?>
 
 <div class="mv-hero">
@@ -88,7 +123,7 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="mv-hero-info">
             <div class="mv-id-row">
                 <span class="mv-id"><?= e($member['member_id']) ?></span>
-                <?= status_badge((string) $member['status']) ?>
+                <?= status_badge($effectiveStatus) ?>
             </div>
             <h2><?= e($member['full_name']) ?></h2>
             <p>@<?= e($member['username']) ?> · Joined <?= date('d M Y', strtotime($member['join_date'])) ?></p>
@@ -107,27 +142,43 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
     <div class="mv-hero-actions">
         <a href="member-edit.php?id=<?= (int)$member['id'] ?>" class="btn btn-primary btn-sm">Edit Member</a>
+        <?php if ($showBinary): ?>
         <a href="tree-view.php?root=<?= (int)$member['id'] ?>" class="btn btn-outline btn-sm">View Tree</a>
+        <?php elseif ($showMatrix): ?>
+        <a href="matrix-tree.php?member=<?= e(urlencode((string) $member['member_id'])) ?>" class="btn btn-outline btn-sm">Matrix Tree</a>
+        <?php endif; ?>
         <a href="direct-member-login.php?q=<?= urlencode($member['member_id']) ?>" class="btn btn-outline btn-sm">Login As</a>
         <a href="members.php" class="btn btn-outline btn-sm">← Back</a>
     </div>
 </div>
 
-<?php if (empty($member['package_id'])): ?>
+<?php if ($showPackages && empty($member['package_id'])): ?>
 <div class="panel" style="margin-bottom:1rem">
-    <div class="panel-header"><h2>Activate Package</h2></div>
+    <div class="panel-header"><h2><?= $productOnlyMode ? 'Activate ID' : 'Activate Package' ?></h2></div>
     <div class="panel-body">
-        <?php if (!$packages): ?>
+        <?php if ($productOnlyMode): ?>
+            <form method="post" class="filters" style="align-items:flex-end" onsubmit="return confirm('Activate this member by product value? Referral and plan income will run.');">
+                <input type="hidden" name="action" value="activate_package">
+                <div class="form-group">
+                    <label>Activation amount</label>
+                    <input type="number" step="0.01" min="0.01" name="activate_amount" required
+                           value="<?= e(number_format(max(product_activate_min_amount(), 1), 2, '.', '')) ?>"
+                           placeholder="Same as product selling price">
+                </div>
+                <button type="submit" class="btn btn-primary">Activate now</button>
+            </form>
+            <p class="muted" style="margin:0.65rem 0 0;font-size:0.82rem">Product Only — uses the activation value (no starter package list).</p>
+        <?php elseif (!$packages): ?>
             <p class="muted">No active packages available. Add one under Packages first.</p>
         <?php else: ?>
-            <form method="post" class="filters" style="align-items:flex-end" onsubmit="return confirm('Activate this member package? Referral, BV and level income will run.');">
+            <form method="post" class="filters" style="align-items:flex-end" onsubmit="return confirm('Activate this member package? Referral and plan income will run.');">
                 <input type="hidden" name="action" value="activate_package">
                 <div class="form-group">
                     <label>Package</label>
                     <select name="package_id" required>
                         <option value="">Select package…</option>
                         <?php foreach ($packages as $p): ?>
-                            <option value="<?= (int) $p['id'] ?>"><?= e($p['name']) ?> — <?= currency((float) $p['amount']) ?> (BV <?= number_format((float) $p['bv'], 0) ?>)</option>
+                            <option value="<?= (int) $p['id'] ?>"><?= e($p['name']) ?> — <?= currency((float) $p['amount']) ?><?= $showBinary ? ' (BV ' . number_format((float) $p['bv'], 0) . ')' : '' ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
@@ -139,6 +190,7 @@ require_once __DIR__ . '/../includes/header.php';
 <?php endif; ?>
 
 <div class="mv-kpis">
+    <?php if ($showBinary): ?>
     <div class="mv-kpi g-blue">
         <span class="mv-kpi-label">Left Count</span>
         <strong><?= (int)$member['left_count'] ?></strong>
@@ -160,6 +212,7 @@ require_once __DIR__ . '/../includes/header.php';
         <strong><?= number_format((float)$openMatch['pairs'], 2) ?></strong>
         <small style="display:block;font-size:0.7rem;font-weight:600;color:#8392ab;margin-top:0.2rem">Match BV <?= number_format((float)$openMatch['matched_bv'], 0) ?></small>
     </div>
+    <?php endif; ?>
     <div class="mv-kpi g-red">
         <span class="mv-kpi-label">Wallet</span>
         <strong><?= currency((float)$member['wallet_balance']) ?></strong>
@@ -192,7 +245,11 @@ require_once __DIR__ . '/../includes/header.php';
                     <strong>
                         <?php if ($member['placement_mid']): ?>
                             <a href="member-view.php?id=<?= (int)$member['placement_db_id'] ?>"><?= e($member['placement_mid'] . ' — ' . $member['placement_name']) ?></a>
-                            <small style="display:block;margin-top:0.2rem;font-weight:600;color:var(--ink-muted)"><?= e(ucfirst((string) ($member['position'] ?? ''))) ?> leg</small>
+                            <?php if (!empty($member['position'])): ?>
+                            <small style="display:block;margin-top:0.2rem;font-weight:600;color:var(--ink-muted)">
+                                <?= $showMatrix ? 'Slot ' . e((string) $member['position']) : e(ucfirst((string) $member['position'])) . ' leg' ?>
+                            </small>
+                            <?php endif; ?>
                         <?php else: ?>
                             Root Member
                         <?php endif; ?>
@@ -204,6 +261,7 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
     </div>
 
+    <?php if ($showBinary): ?>
     <div class="panel mv-card">
         <div class="panel-header"><h2>Binary Children</h2></div>
         <div class="panel-body">
@@ -245,6 +303,28 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
         </div>
     </div>
+    <?php elseif ($showMatrix): ?>
+    <?php
+        $matrixKids = matrix_children($pdo, (int) $member['id']);
+    ?>
+    <div class="panel mv-card">
+        <div class="panel-header"><h2>Matrix Children (<?= (int) matrix_width() ?>×)</h2></div>
+        <div class="panel-body">
+            <?php if (!$matrixKids): ?>
+                <p class="muted">No direct matrix children yet.</p>
+            <?php else: ?>
+                <div class="mv-detail-list">
+                    <?php foreach ($matrixKids as $ch): ?>
+                    <div class="mv-detail">
+                        <span>Slot <?= e((string) ($ch['position'] ?? '—')) ?></span>
+                        <strong><a href="member-view.php?id=<?= (int) $ch['id'] ?>"><?= e($ch['member_id'] . ' — ' . $ch['full_name']) ?></a></strong>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
+    <?php endif; ?>
 </div>
 
 <div class="mv-grid">

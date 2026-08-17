@@ -10,51 +10,83 @@ if (!empty($_SESSION['superadmin_id'])) {
 
 $error = '';
 $setupMsg = '';
+$setupOk = false;
 $flash = get_flash();
 
-// Bootstrap super_admins + feature defaults if needed
 try {
-    feature_ensure_superadmin_table($pdo);
-    feature_ensure_defaults($pdo);
+    $schema = mlm_schema_status($pdo);
+    $needsSetup = !$schema['complete'];
 } catch (Throwable $e) {
-    $error = 'Setup error: ' . $e->getMessage();
+    $schema = ['missing' => [], 'existing' => [], 'complete' => false];
+    $needsSetup = true;
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($error)) {
-    $username = trim($_POST['username'] ?? '');
-    $password = $_POST['password'] ?? '';
-
-    if ($username === '' || $password === '') {
-        $error = 'Username and password are required.';
-    } else {
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['run_schema_setup'])) {
         try {
-            $stmt = $pdo->prepare('SELECT * FROM super_admins WHERE username = ? AND status = ? LIMIT 1');
-            $stmt->execute([$username, 'active']);
-            $sa = $stmt->fetch();
+            $result = mlm_run_schema_setup($pdo);
+            $setupOk = $result['ok'];
+            $setupMsg = $result['message']
+                . ' Tables: ' . $result['tables']
+                . ', Procedures: ' . $result['procedures']
+                . '.';
+            if ($result['created']) {
+                $setupMsg .= ' Created: ' . implode(', ', $result['created']) . '.';
+            }
+            $schema = mlm_schema_status($pdo);
+            $needsSetup = !$schema['complete'];
         } catch (Throwable $e) {
-            $sa = false;
-            $error = 'Super Admin table missing. Click Setup below.';
+            $error = 'Setup failed: ' . $e->getMessage();
+        }
+    } else {
+        // Light bootstrap when tables mostly exist
+        try {
+            feature_ensure_superadmin_table($pdo);
+            feature_ensure_defaults($pdo);
+        } catch (Throwable $e) {
+            // ignore — setup button handles full install
         }
 
-        if (empty($error) && $sa && password_verify($password, $sa['password'])) {
-            $_SESSION['superadmin_id'] = (int) $sa['id'];
-            $_SESSION['superadmin_name'] = $sa['full_name'];
-            $_SESSION['superadmin_username'] = $sa['username'];
-            session_touch('superadmin');
+        $username = trim($_POST['username'] ?? '');
+        $password = $_POST['password'] ?? '';
 
-            $pdo->prepare('UPDATE super_admins SET last_login = NOW() WHERE id = ?')->execute([$sa['id']]);
-            log_superadmin_activity('login', 'Super Admin logged in');
+        if ($username === '' || $password === '') {
+            $error = 'Username and password are required.';
+        } else {
+            try {
+                $stmt = $pdo->prepare('SELECT * FROM super_admins WHERE username = ? AND status = ? LIMIT 1');
+                $stmt->execute([$username, 'active']);
+                $sa = $stmt->fetch();
+            } catch (Throwable $e) {
+                $sa = false;
+                $error = 'Database not ready. Run “Setup Database” first.';
+            }
 
-            header('Location: index.php');
-            exit;
-        }
-        if (empty($error)) {
-            $error = 'Invalid username or password.';
+            if (empty($error) && $sa && password_verify($password, $sa['password'])) {
+                $_SESSION['superadmin_id'] = (int) $sa['id'];
+                $_SESSION['superadmin_name'] = $sa['full_name'];
+                $_SESSION['superadmin_username'] = $sa['username'];
+                session_touch('superadmin');
+
+                $pdo->prepare('UPDATE super_admins SET last_login = NOW() WHERE id = ?')->execute([$sa['id']]);
+                log_superadmin_activity('login', 'Super Admin logged in');
+
+                header('Location: index.php');
+                exit;
+            }
+            if (empty($error)) {
+                $error = 'Invalid username or password.';
+            }
         }
     }
 }
 
-$company = setting('company_name', 'Binary MLM');
+try {
+    $company = setting('company_name', 'Binary MLM');
+} catch (Throwable $e) {
+    $company = 'Binary MLM';
+    $needsSetup = true;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -77,7 +109,7 @@ $company = setting('company_name', 'Binary MLM');
             </div>
             <p class="auth-kicker">Platform Control</p>
             <h1 class="auth-company">Super Admin</h1>
-            <p class="auth-tagline">Configure plan mode, modules and what this client’s Admin &amp; User panels can use.</p>
+            <p class="auth-tagline">Install database, configure plan mode, modules and what this client’s Admin &amp; User panels can use.</p>
         </div>
     </div>
 
@@ -85,14 +117,24 @@ $company = setting('company_name', 'Binary MLM');
         <div class="auth-card">
             <div class="auth-card-head">
                 <h2>Super Admin</h2>
-                <p class="auth-sub">Sign in to manage client features</p>
+                <p class="auth-sub">Sign in to manage this install</p>
             </div>
 
             <?php if (!empty($flash)): ?>
                 <div class="alert alert-<?= e($flash['type'] === 'success' ? 'success' : 'error') ?> auth-alert"><?= e($flash['message']) ?></div>
             <?php endif; ?>
-            <?php if ($setupMsg): ?><div class="alert alert-success auth-alert"><?= e($setupMsg) ?></div><?php endif; ?>
+            <?php if ($setupMsg): ?><div class="alert alert-<?= $setupOk ? 'success' : 'error' ?> auth-alert"><?= e($setupMsg) ?></div><?php endif; ?>
             <?php if ($error): ?><div class="alert alert-error auth-alert"><?= e($error) ?></div><?php endif; ?>
+
+            <?php if ($needsSetup): ?>
+            <div class="sa-setup-box">
+                <form method="post" onsubmit="return confirm('Create / update all missing tables and procedures now?');">
+                    <input type="hidden" name="run_schema_setup" value="1">
+                    <p class="sa-setup-text">Database incomplete (<?= (int) count($schema['missing']) ?> tables missing). One click installs tables + procedures, Super Admin, and Client Admin (admin / admin123).</p>
+                    <button type="submit" class="sa-setup-btn">Setup Database (Tables + Procedures)</button>
+                </form>
+            </div>
+            <?php endif; ?>
 
             <form method="post" class="auth-form" autocomplete="off">
                 <div class="auth-field">
@@ -124,7 +166,7 @@ $company = setting('company_name', 'Binary MLM');
             </form>
 
             <p class="sa-hint">Default: <code>superadmin</code> / <code>superadmin123</code> — change after first login.</p>
-            <p class="sa-hint"><a href="../admin/login.php">← Client Admin login</a></p>
+            <p class="sa-hint"><a href="../admin/login.php">Open Client Admin login →</a></p>
         </div>
     </div>
 </div>

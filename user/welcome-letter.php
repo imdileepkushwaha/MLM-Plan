@@ -22,6 +22,7 @@ if (!empty($user['sponsor_id'])) {
 $company = setting('company_name', 'Binary MLM');
 $supportEmail = setting('support_email', setting('contact_email', ''));
 $supportPhone = setting('contact_phone', '');
+$signatureUrl = company_signature_url();
 $addressParts = array_filter([
     setting('contact_address', ''),
     setting('contact_city', ''),
@@ -120,7 +121,11 @@ $firstName = trim(explode(' ', (string) $user['full_name'])[0] ?: (string) $user
 
                             <p class="wl-regards">Warm regards,</p>
                             <div class="wl-sign">
-                                <div class="wl-sign-line"></div>
+                                <?php if ($signatureUrl): ?>
+                                    <img class="wl-sign-img" src="<?= e($signatureUrl) ?>" alt="Authorized signature">
+                                <?php else: ?>
+                                    <div class="wl-sign-line"></div>
+                                <?php endif; ?>
                                 <strong>Authorised Signatory</strong>
                                 <small><?= e($company) ?></small>
                             </div>

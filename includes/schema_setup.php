@@ -64,7 +64,7 @@ function mlm_expected_tables(): array
         'stock_purchases', 'stock_purchase_items', 'commodity_prices',
         'password_resets', 'member_kyc_documents', 'member_kyc_upi', 'activation_requests',
         'bv_credits', 'closing_runs', 'closing_items', 'package_products',
-        'super_admins',
+        'super_admins', 'withdrawal_payout_logs',
     ];
 }
 
@@ -122,6 +122,15 @@ function mlm_run_schema_setup(PDO $pdo): array
     }
     mlm_exec_sql_file($pdo, dirname(__DIR__) . '/sql/binarymlm_extra_tables_live.sql');
 
+    // Runtime-created tables that may not be in older SQL dumps yet
+    try {
+        require_once dirname(__DIR__) . '/includes/withdrawal.php';
+        wd_ensure_payout_log_table($pdo);
+        wd_ensure_columns($pdo);
+    } catch (Throwable $e) {
+        // ignore
+    }
+
     require_once dirname(__DIR__) . '/includes/procedures.php';
     ensure_mlm_procedures($pdo);
 
@@ -167,8 +176,8 @@ function mlm_run_schema_setup(PDO $pdo): array
     }
 
     $msg = $after['complete']
-        ? 'Database setup complete. Client Admin: admin / admin123 · Super Admin: superadmin / superadmin123'
-        : ('Setup ran, but still missing: ' . implode(', ', $after['missing']) . '. Try login admin / admin123');
+        ? 'Database setup complete. Super Admin: superadmin / superadmin123 · Client Admin: admin / admin123'
+        : ('Setup ran, but still missing: ' . implode(', ', $after['missing']) . '. Re-run setup from Super Admin login.');
 
     return [
         'ok' => $after['complete'],

@@ -17,16 +17,36 @@ $balances = wallet_get_balances($pdo, $uid);
 $types = wallet_types();
 $errors = [];
 
-$from = (string) ($_POST['from_wallet'] ?? 'income');
-$to = (string) ($_POST['to_wallet'] ?? 'topup');
-$amount = (float) ($_POST['amount'] ?? 0);
-$note = trim((string) ($_POST['note'] ?? ''));
+$allowedFrom = ['income', 'topup'];
+$allowedTo = ['topup', 'shopping'];
+$fromGet = (string) ($_GET['from'] ?? '');
+$toGet = (string) ($_GET['to'] ?? '');
+$amountGet = (float) ($_GET['amount'] ?? 0);
+$next = (string) ($_GET['next'] ?? $_POST['next'] ?? '');
+if (!in_array($next, ['shop', 'checkout', ''], true)) {
+    $next = '';
+}
+
+$from = (string) ($_POST['from_wallet'] ?? (in_array($fromGet, $allowedFrom, true) ? $fromGet : 'topup'));
+$to = (string) ($_POST['to_wallet'] ?? (in_array($toGet, $allowedTo, true) ? $toGet : 'shopping'));
+$amount = (float) ($_POST['amount'] ?? ($amountGet > 0 ? $amountGet : 0));
+$note = trim((string) ($_POST['note'] ?? ($next === 'shop' ? 'Transfer for product purchase' : '')));
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $res = wallet_transfer($pdo, $uid, $from, $to, $amount, $note !== '' ? $note : null);
     if ($res['ok']) {
+        if ($next === 'shop' && $to === 'shopping') {
+            flash('success', 'Transferred to Shopping Wallet. You can buy products now.');
+            header('Location: purchase-product.php');
+            exit;
+        }
+        if ($next === 'checkout' && $to === 'shopping') {
+            flash('success', 'Transferred to Shopping Wallet. Complete payment.');
+            header('Location: purchase-checkout.php?step=payment');
+            exit;
+        }
         flash('success', 'Transferred successfully to ' . wallet_label($to) . '.');
-        header('Location: wallet-transfer.php');
+        header('Location: wallet-transfer.php' . ($next !== '' ? '?next=' . rawurlencode($next) : ''));
         exit;
     }
     $errors[] = $res['error'] ?? 'Transfer failed.';
@@ -42,15 +62,27 @@ $flash = get_flash();
 <div class="up-page-head">
     <div>
         <h1>Wallet Transfer</h1>
-        <p>Move funds between your wallets. Income → Topup / Shopping, or Topup → Shopping.</p>
+        <p>Move funds between your wallets. For shopping: Topup → Shopping, then buy products.</p>
     </div>
     <div class="up-head-actions">
+        <?php if (feature_module_allowed('products')): ?>
+        <a href="purchase-product.php" class="up-btn up-btn-outline">Buy Products</a>
+        <?php endif; ?>
         <a href="wallet.php" class="up-btn up-btn-outline">All Wallets</a>
     </div>
 </div>
 
 <?php if ($flash): ?>
     <div class="up-alert up-alert-<?= $flash['type'] === 'error' ? 'err' : 'ok' ?>"><?= e($flash['message']) ?></div>
+<?php endif; ?>
+
+<?php if ($next === 'shop' || $next === 'checkout'): ?>
+<div class="up-alert up-alert-ok">
+    Transfer to <strong>Shopping Wallet</strong>, then continue to
+    <?= $next === 'checkout'
+        ? '<a href="purchase-checkout.php?step=payment">checkout payment</a>'
+        : '<a href="purchase-product.php">shop</a>' ?>.
+</div>
 <?php endif; ?>
 
 <div class="wal-stats">
@@ -86,6 +118,7 @@ $flash = get_flash();
                 <div class="up-alert up-alert-err"><?= e($err) ?></div>
             <?php endforeach; ?>
             <form method="post" class="wal-form">
+                <?php if ($next !== ''): ?><input type="hidden" name="next" value="<?= e($next) ?>"><?php endif; ?>
                 <div class="up-form-grid">
                     <div class="up-field">
                         <label for="from_wallet">From wallet</label>

@@ -65,6 +65,30 @@ function status_badge(string $status): string
     return '<span class="badge badge-' . e($class) . '">' . e($label) . '</span>';
 }
 
+/**
+ * Display status: "active" only when not blocked AND a package is assigned.
+ * Shared by admin + user panels.
+ */
+function member_effective_status(array $member): string
+{
+    $status = strtolower(trim((string) ($member['status'] ?? 'inactive')));
+    if ($status === 'blocked') {
+        return 'blocked';
+    }
+    if (empty($member['package_id'])) {
+        return 'inactive';
+    }
+    if ($status === 'active') {
+        return 'active';
+    }
+    return $status !== '' ? $status : 'inactive';
+}
+
+function member_is_active(array $member): bool
+{
+    return member_effective_status($member) === 'active';
+}
+
 function icon_svg(string $name): string
 {
     $icons = [
@@ -163,6 +187,14 @@ function products_ensure_columns(PDO $pdo): void
         $exists = $pdo->query("SHOW COLUMNS FROM products LIKE 'bv'")->fetch();
         if (!$exists) {
             $pdo->exec('ALTER TABLE products ADD COLUMN bv DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER price');
+        }
+    } catch (Throwable $e) {
+        // ignore
+    }
+    try {
+        $pkgCol = $pdo->query("SHOW COLUMNS FROM products LIKE 'package_id'")->fetch();
+        if (!$pkgCol) {
+            $pdo->exec('ALTER TABLE products ADD COLUMN package_id INT NULL DEFAULT NULL AFTER bv');
         }
     } catch (Throwable $e) {
         // ignore

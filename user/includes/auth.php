@@ -11,6 +11,14 @@ function require_user(): void
         exit;
     }
 
+    // License: kick logged-in members when install is suspended/expired
+    if (!client_license_ok()) {
+        user_logout_session();
+        flash('error', client_license_message() ?: 'Access is temporarily unavailable. Please contact support.');
+        header('Location: login.php');
+        exit;
+    }
+
     // Maintenance: kick logged-in members immediately
     if (is_maintenance_mode()) {
         user_logout_session();
@@ -49,25 +57,30 @@ function current_user(PDO $pdo, bool $fresh = false): ?array
 
 /**
  * Display status for UI: "active" only when member status is active AND a package is assigned.
+ * Canonical implementation lives in includes/utility.php.
  */
-function member_effective_status(array $member): string
-{
-    $status = strtolower(trim((string) ($member['status'] ?? 'inactive')));
-    if ($status === 'blocked') {
-        return 'blocked';
+if (!function_exists('member_effective_status')) {
+    function member_effective_status(array $member): string
+    {
+        $status = strtolower(trim((string) ($member['status'] ?? 'inactive')));
+        if ($status === 'blocked') {
+            return 'blocked';
+        }
+        if (empty($member['package_id'])) {
+            return 'inactive';
+        }
+        if ($status === 'active') {
+            return 'active';
+        }
+        return $status !== '' ? $status : 'inactive';
     }
-    if (empty($member['package_id'])) {
-        return 'inactive';
-    }
-    if ($status === 'active') {
-        return 'active';
-    }
-    return $status !== '' ? $status : 'inactive';
 }
 
-function member_is_active(array $member): bool
-{
-    return member_effective_status($member) === 'active';
+if (!function_exists('member_is_active')) {
+    function member_is_active(array $member): bool
+    {
+        return member_effective_status($member) === 'active';
+    }
 }
 
 function user_initials(string $name): string

@@ -5,6 +5,7 @@ require_once __DIR__ . '/includes/header.php';
 
 $uid = (int) $user['id'];
 $types = income_types();
+$showWithdrawUi = feature_module_allowed('withdrawals');
 
 $paidTotal = income_sum($pdo, $uid, null, 'paid');
 $pendingTotal = income_sum($pdo, $uid, null, 'pending');
@@ -51,7 +52,9 @@ if (!$needsActivation) {
         <h1>My Income</h1>
         <p>Overview of all commission types credited to your account.</p>
     </div>
+    <?php if ($showWithdrawUi): ?>
     <a href="withdrawal-fund.php" class="up-btn up-btn-primary">Withdraw</a>
+    <?php endif; ?>
 </div>
 
 <div class="inc-stats">

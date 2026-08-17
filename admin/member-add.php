@@ -2,12 +2,15 @@
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/procedures.php';
 require_once __DIR__ . '/../includes/closing.php';
+require_once __DIR__ . '/../includes/registration.php';
 $pageTitle = 'Add Member';
 
 $packages = $pdo->query("SELECT id, name, amount FROM packages WHERE status = 'active' ORDER BY amount")->fetchAll();
 $parents = $pdo->query("SELECT id, member_id, full_name FROM members WHERE status = 'active' ORDER BY id")->fetchAll();
 $errors = [];
 $useBinaryPlacement = feature_registration_uses_binary_placement();
+$useMatrixPlacement = feature_registration_uses_matrix_placement();
+$matrixWidth = matrix_width();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $fullName = trim($_POST['full_name'] ?? '');
@@ -27,7 +30,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (strlen($password) < 6) $errors[] = 'Password must be at least 6 characters.';
 
     // Parent placement rules
-    if (!$useBinaryPlacement) {
+    if ($useMatrixPlacement) {
+        $parentId = null;
+        $position = '';
+        $autoPlace = false;
+        if (!$sponsorId) {
+            $errors[] = 'Sponsor is required for matrix placement.';
+        }
+    } elseif (!$useBinaryPlacement) {
         $parentId = null;
         $position = '';
         $autoPlace = false;
@@ -48,6 +58,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($check->fetch()) {
             $errors[] = 'Username or email already exists.';
         }
+        if ($phone !== '' && reg_phone_exists($pdo, $phone)) {
+            $errors[] = 'This mobile number is already registered.';
+        }
     }
 
     if (!$errors && $parentId) {
@@ -67,7 +80,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $placementId = null;
-    if (!$errors && $parentId && $position) {
+    if (!$errors && $useMatrixPlacement && $sponsorId) {
+        members_ensure_flexible_position($pdo);
+        $found = reg_find_matrix_placement($pdo, $sponsorId, $matrixWidth);
+        if (!$found) {
+            $errors[] = 'Could not find a free matrix slot under this sponsor.';
+        } else {
+            $placementId = (int) $found['placement_id'];
+            $position = (string) $found['position'];
+        }
+    } elseif (!$errors && $useBinaryPlacement && $parentId && $position) {
         $slot = $pdo->prepare('SELECT id FROM members WHERE placement_id = ? AND position = ? LIMIT 1');
         $slot->execute([$parentId, $position]);
         $occupied = $slot->fetch();
@@ -100,7 +122,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ]);
         $newId = (int) $pdo->lastInsertId();
 
-        if ($placementId && $position) {
+        if ($useBinaryPlacement && $placementId && $position) {
             updateUplineCounts($pdo, $placementId, $position);
         }
 
@@ -207,7 +229,13 @@ require_once __DIR__ . '/../includes/header.php';
 
         <div class="alert alert-info" style="margin-bottom:1.1rem">
             <strong>Sponsor</strong> = who referred the member (commission).
+            <?php if ($useBinaryPlacement): ?>
             <strong>Parent ID</strong> = binary tree placement (Left / Right under parent).
+            <?php elseif ($useMatrixPlacement): ?>
+            Matrix <?= (int) $matrixWidth ?>× spillover places the member automatically under the sponsor.
+            <?php else: ?>
+            Level / Unilevel: member joins the sponsor chain only (no tree legs).
+            <?php endif; ?>
         </div>
 
         <form method="post">
@@ -296,9 +324,15 @@ require_once __DIR__ . '/../includes/header.php';
                         Auto Place if position is full (next free on same leg)
                     </label>
                 </div>
+                <?php elseif ($useMatrixPlacement): ?>
+                <div class="form-group" style="grid-column:1/-1">
+                    <div class="alert alert-info" style="margin:0">
+                        Matrix <?= (int) $matrixWidth ?>×: placement is auto-assigned by spillover under the selected sponsor. No Left/Right parent picker.
+                    </div>
+                </div>
                 <?php else: ?>
                 <div class="form-group" style="grid-column:1/-1">
-                    <div class="alert alert-info" style="margin:0">Level-only plan: no Left/Right binary placement. Member joins under sponsor only.</div>
+                    <div class="alert alert-info" style="margin:0">Level / Unilevel: no tree placement. Member joins under sponsor only.</div>
                 </div>
                 <?php endif; ?>
             </div>

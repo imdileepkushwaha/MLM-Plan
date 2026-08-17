@@ -4,6 +4,8 @@ require_once __DIR__ . '/../includes/package_products.php';
 $pageTitle = 'Add Packages';
 
 package_products_ensure_table($pdo);
+$packagesLocked = client_packages_locked();
+$showBinaryMetrics = plan_uses_binary();
 
 // Ensure capping column exists
 try {
@@ -15,8 +17,17 @@ try {
     // ignore
 }
 
+$blockMutate = static function () use ($packagesLocked): void {
+    if ($packagesLocked) {
+        flash('error', 'Packages cannot be changed right now.');
+        header('Location: packages.php');
+        exit;
+    }
+};
+
 // Delete
 if (isset($_GET['delete'])) {
+    $blockMutate();
     $id = (int) $_GET['delete'];
     $used = $pdo->prepare('SELECT COUNT(*) FROM members WHERE package_id = ?');
     $used->execute([$id]);
@@ -33,6 +44,7 @@ if (isset($_GET['delete'])) {
 
 // Toggle status
 if (isset($_GET['toggle'])) {
+    $blockMutate();
     $id = (int) $_GET['toggle'];
     $pdo->prepare("UPDATE packages SET status = IF(status='active','inactive','active') WHERE id = ?")->execute([$id]);
     flash('success', 'Package status updated.');
@@ -42,6 +54,7 @@ if (isset($_GET['toggle'])) {
 
 $errors = [];
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $blockMutate();
     $id = (int) ($_POST['id'] ?? 0);
     $name = trim($_POST['name'] ?? '');
     $amount = (float) ($_POST['amount'] ?? 0);
@@ -50,20 +63,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $description = trim($_POST['description'] ?? '');
     $status = ($_POST['status'] ?? 'active') === 'inactive' ? 'inactive' : 'active';
 
+    if (!$showBinaryMetrics) {
+        if ($id > 0) {
+            $keep = $pdo->prepare('SELECT bv, capping FROM packages WHERE id = ?');
+            $keep->execute([$id]);
+            $keepRow = $keep->fetch();
+            if ($keepRow) {
+                $bv = (float) $keepRow['bv'];
+                $capping = (float) $keepRow['capping'];
+            }
+        } else {
+            $bv = $amount > 0 ? $amount : 0;
+            $capping = 0;
+        }
+    }
+
     if ($name === '') {
         $errors[] = 'Plan name is required.';
     }
     if ($amount <= 0) {
         $errors[] = 'Investment amount must be greater than 0.';
     }
-    if ($bv < 0) {
-        $errors[] = 'BV cannot be negative.';
-    }
-    if ($bv === 0.0 && $amount > 0) {
-        $bv = $amount;
-    }
-    if ($capping < 0) {
-        $errors[] = 'Capping cannot be negative.';
+    if ($showBinaryMetrics) {
+        if ($bv < 0) {
+            $errors[] = 'BV cannot be negative.';
+        }
+        if ($bv === 0.0 && $amount > 0) {
+            $bv = $amount;
+        }
+        if ($capping < 0) {
+            $errors[] = 'Capping cannot be negative.';
+        }
     }
 
     if (!$errors) {
@@ -108,11 +138,19 @@ $formStatus = $edit['status'] ?? $_POST['status'] ?? 'active';
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
+<?php if ($packagesLocked): ?>
+<div class="alert alert-info">
+    <strong>Packages are locked.</strong>
+    You can view plans below. Add / edit / delete is not available right now.
+</div>
+<?php endif; ?>
+
+<?php if (!$packagesLocked): ?>
 <div class="panel pkg-form-panel">
     <div class="panel-header">
         <div>
             <h2><?= $edit ? 'Edit Package' : 'Add Package' ?></h2>
-            <p class="members-sub">Plan name, investment, BV, capping and description</p>
+            <p class="members-sub"><?= $showBinaryMetrics ? 'Plan name, investment, BV, capping and description' : 'Plan name, investment and description' ?></p>
         </div>
         <?php if ($edit): ?>
         <a href="packages.php" class="btn btn-outline btn-sm">Cancel edit</a>
@@ -131,6 +169,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <label>Investment Amount (₹) *</label>
                     <input type="number" step="0.01" min="0" name="amount" value="<?= e((string) $formAmount) ?>" placeholder="1000" required>
                 </div>
+                <?php if ($showBinaryMetrics): ?>
                 <div class="form-group">
                     <label>BV (Business Volume)</label>
                     <input type="number" step="0.01" min="0" name="bv" value="<?= e((string) $formBv) ?>" placeholder="Same as amount if blank">
@@ -141,6 +180,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <input type="number" step="0.01" min="0" name="capping" value="<?= e((string) $formCapping) ?>" placeholder="e.g. 50000">
                     <small class="field-hint">Max earning limit for this package (0 = no limit)</small>
                 </div>
+                <?php endif; ?>
                 <div class="form-group">
                     <label>Status</label>
                     <select name="status">
@@ -160,6 +200,7 @@ require_once __DIR__ . '/../includes/header.php';
         </form>
     </div>
 </div>
+<?php endif; ?>
 
 <div class="pkg-cards-head">
     <h2>All Packages</h2>
@@ -190,6 +231,7 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="pkg-price-label">One-time Investment</div>
         </div>
         <div class="pkg-metrics">
+            <?php if ($showBinaryMetrics): ?>
             <div class="pkg-metric">
                 <span class="pkg-metric-ico blue">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
@@ -208,6 +250,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <span>Capping</span>
                 </div>
             </div>
+            <?php endif; ?>
             <div class="pkg-metric">
                 <span class="pkg-metric-ico purple">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
@@ -228,6 +271,7 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
         </div>
         <p class="pkg-desc"><?= e($p['description'] ?: 'No description') ?></p>
+        <?php if (!$packagesLocked): ?>
         <div class="pkg-actions">
             <a href="?edit=<?= (int) $p['id'] ?>" class="pkg-btn edit">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
@@ -238,6 +282,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <?= $isActive ? 'Disable' : 'Enable' ?>
             </a>
         </div>
+        <?php endif; ?>
     </article>
 <?php endforeach; endif; ?>
 </div>

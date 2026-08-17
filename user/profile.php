@@ -3,6 +3,11 @@ $pageTitle = 'My Profile';
 require_once __DIR__ . '/../includes/closing.php';
 require_once __DIR__ . '/includes/header.php';
 
+$showBinaryUi = plan_uses_binary();
+$showWithdrawUi = feature_module_allowed('withdrawals');
+$teamTreeHref = $showBinaryUi ? 'my-treeview.php' : (plan_uses_matrix() ? 'matrix-tree.php' : 'level-tree.php');
+$teamTreeLabel = $showBinaryUi ? 'Binary tree' : (plan_uses_matrix() ? 'Matrix tree' : 'Level tree');
+
 $uid = (int) $user['id'];
 $memberCode = (string) ($user['member_id'] ?? '');
 $status = member_effective_status($user);
@@ -13,7 +18,7 @@ $leftBv = (float) ($user['left_bv'] ?? 0);
 $rightBv = (float) ($user['right_bv'] ?? 0);
 $pairBv = closing_pair_bv();
 $flush = max(0, (int) setting('binary_flush_pairs', '0'));
-$openMatch = closing_compute_match($leftBv, $rightBv, $pairBv, $flush);
+$openMatch = $showBinaryUi ? closing_compute_match($leftBv, $rightBv, $pairBv, $flush) : ['pairs' => 0];
 $openPairs = (float) ($openMatch['pairs'] ?? 0);
 
 $sponsor = null;
@@ -32,7 +37,9 @@ try {
     $directCount = 0;
 }
 
-$teamCount = (int) $user['left_count'] + (int) $user['right_count'];
+$teamCount = $showBinaryUi
+    ? ((int) $user['left_count'] + (int) $user['right_count'])
+    : $directCount;
 $downlineCount = max($teamCount, $directCount);
 
 $packageAmount = 0.0;
@@ -51,10 +58,12 @@ $xpTarget = $packageAmount > 0 ? $packageAmount : 10000;
 $xpPct = min(100, $xpTarget > 0 ? round(($wallet / $xpTarget) * 100) : 0);
 
 $refBase = rtrim(APP_URL, '/') . '/user/register.php';
-$referralLeft = $refBase . '?ref=' . rawurlencode($memberCode) . '&pos=left';
-$referralRight = $refBase . '?ref=' . rawurlencode($memberCode) . '&pos=right';
+$referralSponsor = $refBase . '?ref=' . rawurlencode($memberCode);
+$referralLeft = $referralSponsor . '&pos=left';
+$referralRight = $referralSponsor . '&pos=right';
 $waLeftUrl = 'https://wa.me/?text=' . rawurlencode('Join with my Left referral link (' . $memberCode . '): ' . $referralLeft);
 $waRightUrl = 'https://wa.me/?text=' . rawurlencode('Join with my Right referral link (' . $memberCode . '): ' . $referralRight);
+$waSponsorUrl = 'https://wa.me/?text=' . rawurlencode('Join with my referral link (' . $memberCode . '): ' . $referralSponsor);
 $company = setting('company_name', 'Binary MLM');
 
 $weekly = array_fill(0, 7, 0.0);
@@ -122,9 +131,11 @@ try {
         ORDER BY requested_at DESC
         LIMIT 5
     ');
-    $ws2->execute([$uid]);
-    foreach ($ws2->fetchAll() as $row) {
-        $transactions[] = $row;
+    if ($showWithdrawUi) {
+        $ws2->execute([$uid]);
+        foreach ($ws2->fetchAll() as $row) {
+            $transactions[] = $row;
+        }
     }
 } catch (Throwable $e) {
     // ignore
@@ -226,7 +237,9 @@ $transactions = array_slice($transactions, 0, 8);
                         <div>
                             <span class="pp-panel-kicker">Grow team</span>
                             <h3>Referral Links</h3>
-                            <p>Share Left / Right links under ID <strong><?= e($memberCode) ?></strong>.</p>
+                            <p><?= $showBinaryUi
+                                ? 'Share Left / Right links under ID <strong>' . e($memberCode) . '</strong>.'
+                                : 'Share your sponsor link under ID <strong>' . e($memberCode) . '</strong>.' ?></p>
                         </div>
                     </div>
                 </div>
@@ -237,6 +250,7 @@ $transactions = array_slice($transactions, 0, 8);
                         <strong><?= e($memberCode) ?></strong>
                     </div>
 
+                    <?php if ($showBinaryUi): ?>
                     <div class="pp-ref-block pp-ref-left">
                         <div class="pp-ref-block-top">
                             <div class="pp-ref-leg">
@@ -280,6 +294,26 @@ $transactions = array_slice($transactions, 0, 8);
                             </a>
                         </div>
                     </div>
+                    <?php else: ?>
+                    <div class="pp-ref-block">
+                        <div class="pp-ref-block-top">
+                            <div class="pp-ref-leg">
+                                <strong>Sponsor Link</strong>
+                            </div>
+                            <span class="pp-ref-count"><?= (int) $directCount ?> directs</span>
+                        </div>
+                        <p class="pp-ref-hint">Share this link so new members join under your sponsorship.</p>
+                        <div class="pp-ref-line">
+                            <input type="text" readonly value="<?= e($referralSponsor) ?>" id="ppRefSponsor" aria-label="Sponsor referral link">
+                            <button type="button" class="pp-copy" data-copy="#ppRefSponsor" title="Copy">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                            </button>
+                            <a href="<?= e($waSponsorUrl) ?>" class="pp-wa" target="_blank" rel="noopener noreferrer" title="Share on WhatsApp">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.435 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                            </a>
+                        </div>
+                    </div>
+                    <?php endif; ?>
                 </div>
             </div>
 
@@ -425,18 +459,23 @@ $transactions = array_slice($transactions, 0, 8);
                             <div>
                                 <span class="pp-panel-kicker">Upline</span>
                                 <h3>Sponsor Network Info</h3>
-                                <p>Your place in the <?= e($company) ?> binary network.</p>
+                                <p>Your place in the <?= e($company) ?> network.</p>
                             </div>
                         </div>
                     </div>
                     <div class="pp-sponsor-body">
                         <div class="pp-sponsor-chips">
                             <span class="pp-s-chip"><small>Package</small><strong><?= e($user['package_name'] ?? 'None') ?></strong></span>
+                            <?php if ($showBinaryUi): ?>
                             <span class="pp-s-chip"><small>Position</small><strong><?= e($user['position'] ? ucfirst($user['position']) : '—') ?></strong></span>
                             <span class="pp-s-chip"><small>L / R</small><strong><?= (int) $user['left_count'] ?> / <?= (int) $user['right_count'] ?></strong></span>
                             <span class="pp-s-chip"><small>Left BV</small><strong><?= number_format($leftBv, 0) ?></strong></span>
                             <span class="pp-s-chip"><small>Right BV</small><strong><?= number_format($rightBv, 0) ?></strong></span>
                             <span class="pp-s-chip"><small>Open Pairs</small><strong><?= number_format($openPairs, $openPairs == floor($openPairs) ? 0 : 2) ?></strong></span>
+                            <?php else: ?>
+                            <span class="pp-s-chip"><small>Direct</small><strong><?= (int) $directCount ?></strong></span>
+                            <span class="pp-s-chip"><small>Team</small><strong><?= (int) $teamCount ?></strong></span>
+                            <?php endif; ?>
                         </div>
                         <p>
                             <?= $sponsor
@@ -556,7 +595,7 @@ $transactions = array_slice($transactions, 0, 8);
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><path d="M12 7v4M12 11L5 17M12 11l7 6"/></svg>
                             </span>
                             <strong><?= $teamCount ?> Team</strong>
-                            <small>Binary</small>
+                            <small><?= e($showBinaryUi ? 'Binary' : 'Network') ?></small>
                         </div>
                         <div class="pp-q blue">
                             <span class="pp-q-ico" aria-hidden="true">
@@ -565,6 +604,13 @@ $transactions = array_slice($transactions, 0, 8);
                             <strong><?= currency($wallet) ?></strong>
                             <small>Wallet</small>
                         </div>
+                        <a href="<?= e($teamTreeHref) ?>" class="pp-q grey">
+                            <span class="pp-q-ico" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><path d="M12 7v4M12 11L5 17M12 11l7 6"/></svg>
+                            </span>
+                            <strong>Team</strong>
+                            <small><?= e($teamTreeLabel) ?></small>
+                        </a>
                         <a href="index.php" class="pp-q grey">
                             <span class="pp-q-ico" aria-hidden="true">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
@@ -607,7 +653,7 @@ $transactions = array_slice($transactions, 0, 8);
                             <span class="pp-dot-wrap red"><span class="pp-dot"></span></span>
                             <div class="pp-timeline-card">
                                 <strong>Default Placement Set</strong>
-                                <small>Tree Parent: <?= $sponsor ? e($sponsor['member_id']) : 'Root' ?> · Side: <?= e($user['position'] ? ucfirst($user['position']) : '—') ?></small>
+                                <small>Tree Parent: <?= $sponsor ? e($sponsor['member_id']) : 'Root' ?><?= $showBinaryUi ? ' · Side: ' . e($user['position'] ? ucfirst($user['position']) : '—') : '' ?></small>
                             </div>
                         </li>
                     </ul>

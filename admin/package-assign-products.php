@@ -31,6 +31,11 @@ $existingAssigned = $selectedPackageId > 0 ? package_products_list($pdo, $select
 $assignmentLocked = count($existingAssigned) > 0;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (client_packages_locked()) {
+        flash('error', 'Packages cannot be changed right now.');
+        header('Location: package-assign-products.php' . ($selectedPackageId ? '?package_id=' . $selectedPackageId : ''));
+        exit;
+    }
     $selectedPackageId = (int) ($_POST['package_id'] ?? 0);
     $existingAssigned = $selectedPackageId > 0 ? package_products_list($pdo, $selectedPackageId) : [];
     $assignmentLocked = count($existingAssigned) > 0;

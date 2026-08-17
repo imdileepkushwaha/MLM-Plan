@@ -21,6 +21,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         feature_save($pdo, $key, $val);
     }
+
+    $logoUp = branding_store_image($_FILES['company_logo'] ?? [], 'logo');
+    if (!$logoUp['ok']) {
+        flash('error', $logoUp['error'] ?: 'Logo upload failed.');
+        header('Location: branding.php');
+        exit;
+    }
+    if (!empty($logoUp['path'])) {
+        branding_delete_file(setting('company_logo', ''));
+        feature_save($pdo, 'company_logo', $logoUp['path']);
+    }
+    if (!empty($_POST['remove_logo'])) {
+        branding_delete_file(setting('company_logo', ''));
+        feature_save($pdo, 'company_logo', '');
+    }
+
+    $favUp = branding_store_image($_FILES['company_favicon'] ?? [], 'favicon');
+    if (!$favUp['ok']) {
+        flash('error', $favUp['error'] ?: 'Favicon upload failed.');
+        header('Location: branding.php');
+        exit;
+    }
+    if (!empty($favUp['path'])) {
+        branding_delete_file(setting('company_favicon', ''));
+        feature_save($pdo, 'company_favicon', $favUp['path']);
+    }
+    if (!empty($_POST['remove_favicon'])) {
+        branding_delete_file(setting('company_favicon', ''));
+        feature_save($pdo, 'company_favicon', '');
+    }
+
     clear_setting_cache();
     log_superadmin_activity('branding_save', 'Updated client branding');
     flash('success', 'Client branding updated.');
@@ -36,16 +67,18 @@ $pad = (int) setting('member_id_pad', '5');
 $sampleId = $prefix . str_pad('1', $pad, '0', STR_PAD_LEFT);
 $currency = setting('currency', 'INR');
 $symbol = setting('currency_symbol', '₹');
+$logoUrl = company_logo_url();
+$favUrl = company_favicon_url();
 ?>
 <section class="sa-hero">
     <div>
         <span class="sa-hero-kicker">White-label</span>
         <h1>Client Branding</h1>
-        <p>Company name, currency and member ID format shown across Admin &amp; User panels.</p>
+        <p>Company name, logo, favicon, currency and member ID format shown across Admin &amp; User panels.</p>
     </div>
 </section>
 
-<form method="post" class="sa-brand-layout">
+<form method="post" enctype="multipart/form-data" class="sa-brand-layout">
     <div class="sa-panel" style="margin:0">
         <div class="sa-panel-head">
             <div>
@@ -81,6 +114,64 @@ $symbol = setting('currency_symbol', '₹');
                     <input type="number" min="3" max="8" name="member_id_pad" id="saPad" value="<?= e((string) $pad) ?>">
                     <span class="sa-field-hint">Digits after prefix (3–8)</span>
                 </div>
+                <div class="form-group span-2">
+                    <label>Brand assets</label>
+                    <div class="sa-upload-grid">
+                        <div class="sa-upload-card" data-sa-upload>
+                            <input type="file" name="company_logo" id="saLogoFile" class="sa-upload-input" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp">
+                            <div class="sa-upload-preview<?= $logoUrl ? ' has-file' : '' ?>" id="saLogoPreview">
+                                <?php if ($logoUrl): ?>
+                                <img src="<?= e($logoUrl) ?>" alt="Logo">
+                                <?php else: ?>
+                                <span class="sa-upload-empty" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                                </span>
+                                <?php endif; ?>
+                            </div>
+                            <div class="sa-upload-meta">
+                                <strong>Company logo</strong>
+                                <p>JPG, PNG or WebP · max 2MB<br>Sidebars &amp; login screens</p>
+                                <div class="sa-upload-actions">
+                                    <label for="saLogoFile" class="sa-upload-btn">Choose file</label>
+                                    <?php if ($logoUrl): ?>
+                                    <label class="sa-upload-remove">
+                                        <input type="checkbox" name="remove_logo" value="1">
+                                        <span>Remove</span>
+                                    </label>
+                                    <?php endif; ?>
+                                </div>
+                                <span class="sa-upload-name" id="saLogoName"><?= $logoUrl ? 'Current logo set' : 'No file selected' ?></span>
+                            </div>
+                        </div>
+
+                        <div class="sa-upload-card sa-upload-card-fav" data-sa-upload>
+                            <input type="file" name="company_favicon" id="saFavFile" class="sa-upload-input" accept=".ico,.jpg,.jpeg,.png,.webp,image/x-icon,image/png,image/jpeg,image/webp">
+                            <div class="sa-upload-preview sa-upload-preview-fav<?= $favUrl ? ' has-file' : '' ?>" id="saFavPreview">
+                                <?php if ($favUrl): ?>
+                                <img src="<?= e($favUrl) ?>" alt="Favicon">
+                                <?php else: ?>
+                                <span class="sa-upload-empty" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg>
+                                </span>
+                                <?php endif; ?>
+                            </div>
+                            <div class="sa-upload-meta">
+                                <strong>Favicon</strong>
+                                <p>ICO, PNG, JPG or WebP<br>Falls back to logo if empty</p>
+                                <div class="sa-upload-actions">
+                                    <label for="saFavFile" class="sa-upload-btn">Choose file</label>
+                                    <?php if ($favUrl): ?>
+                                    <label class="sa-upload-remove">
+                                        <input type="checkbox" name="remove_favicon" value="1">
+                                        <span>Remove</span>
+                                    </label>
+                                    <?php endif; ?>
+                                </div>
+                                <span class="sa-upload-name" id="saFavName"><?= $favUrl ? 'Current favicon set' : 'No file selected' ?></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="sa-form-actions">
                 <button type="submit" class="btn btn-primary">Save branding</button>
@@ -97,6 +188,9 @@ $symbol = setting('currency_symbol', '₹');
         </div>
         <div class="sa-panel-body">
             <div class="sa-brand-preview">
+                <?php if ($logoUrl): ?>
+                <img class="sa-brand-preview-logo" src="<?= e($logoUrl) ?>" alt="">
+                <?php endif; ?>
                 <span>Company</span>
                 <strong id="saPreviewName"><?= e($coName) ?></strong>
                 <em>Sample ID · <span id="saPreviewId"><?= e($sampleId) ?></span> · <span id="saPreviewCur"><?= e($symbol . ' / ' . $currency) ?></span></em>
@@ -125,6 +219,59 @@ $symbol = setting('currency_symbol', '₹');
     [name, prefix, pad, cur, sym].forEach(function (el) {
         if (el) el.addEventListener('input', sync);
     });
+
+    function bindUpload(inputId, previewId, nameId) {
+        var input = document.getElementById(inputId);
+        var preview = document.getElementById(previewId);
+        var nameEl = document.getElementById(nameId);
+        if (!input || !preview) return;
+        var card = input.closest('[data-sa-upload]');
+
+        function setPreview(file) {
+            if (!file) return;
+            if (!file.type || file.type.indexOf('image/') !== 0) {
+                if (nameEl) nameEl.textContent = file.name;
+                return;
+            }
+            var url = URL.createObjectURL(file);
+            preview.innerHTML = '<img src="' + url + '" alt="">';
+            preview.classList.add('has-file');
+            if (nameEl) nameEl.textContent = file.name;
+            if (card) card.classList.add('has-selection');
+        }
+
+        input.addEventListener('change', function () {
+            var file = input.files && input.files[0];
+            if (file) setPreview(file);
+        });
+
+        if (card) {
+            ['dragenter', 'dragover'].forEach(function (ev) {
+                card.addEventListener(ev, function (e) {
+                    e.preventDefault();
+                    card.classList.add('is-drag');
+                });
+            });
+            ['dragleave', 'drop'].forEach(function (ev) {
+                card.addEventListener(ev, function (e) {
+                    e.preventDefault();
+                    card.classList.remove('is-drag');
+                });
+            });
+            card.addEventListener('drop', function (e) {
+                var files = e.dataTransfer && e.dataTransfer.files;
+                if (!files || !files.length) return;
+                try {
+                    var dt = new DataTransfer();
+                    dt.items.add(files[0]);
+                    input.files = dt.files;
+                } catch (err) { /* ignore */ }
+                setPreview(files[0]);
+            });
+        }
+    }
+    bindUpload('saLogoFile', 'saLogoPreview', 'saLogoName');
+    bindUpload('saFavFile', 'saFavPreview', 'saFavName');
 })();
 </script>
 <?php require __DIR__ . '/includes/footer.php'; ?>

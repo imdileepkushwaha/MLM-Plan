@@ -62,6 +62,15 @@ $categories = $pdo->query("SELECT id, name FROM product_categories WHERE status=
 $subcategories = $pdo->query("SELECT id, category_id, name FROM product_subcategories WHERE status='active' ORDER BY name")->fetchAll();
 $sizes = $pdo->query("SELECT id, name FROM product_sizes WHERE status='active' ORDER BY sort_order, name")->fetchAll();
 $colors = $pdo->query("SELECT id, name, hex_code FROM product_colors WHERE status='active' ORDER BY name")->fetchAll();
+$packages = [];
+try {
+    $packages = $pdo->query("SELECT id, name, amount FROM packages WHERE status='active' ORDER BY amount ASC")->fetchAll();
+} catch (Throwable $e) {
+    $packages = [];
+}
+$productActivates = feature_enabled('feature_product_activates_package');
+$productOnly = feature_product_only_activation();
+$productMinActivate = product_activate_min_amount();
 
 $errors = [];
 $edit = null;
@@ -93,6 +102,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $status = ($_POST['status'] ?? 'active') === 'inactive' ? 'inactive' : 'active';
     $price = (float) ($_POST['price'] ?? 0);
     $bv = (float) ($_POST['bv'] ?? 0);
+    // Product Only hides package link — preserve existing package_id on edit
+    if ($productOnly) {
+        $packageId = null;
+        if ($id > 0) {
+            $keepPkg = $pdo->prepare('SELECT package_id FROM products WHERE id = ? LIMIT 1');
+            $keepPkg->execute([$id]);
+            $packageId = (int) ($keepPkg->fetchColumn() ?: 0) ?: null;
+        }
+    } else {
+        $packageId = (int) ($_POST['package_id'] ?? 0) ?: null;
+    }
     $mrp = (float) ($_POST['mrp'] ?? 0);
     $discount = 0.0;
     if ($mrp > 0 && $price >= 0 && $price <= $mrp) {
@@ -129,7 +149,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'Product title me kam se kam 2 shabd hone chahiye.';
     }
     if ($price < 0) $errors[] = 'Price cannot be negative.';
-    if ($bv < 0) $errors[] = 'BV cannot be negative.';
+    if ($bv < 0) $errors[] = 'PV cannot be negative.';
     if ($skuMode === 'manual' && $sku === '') {
         $errors[] = 'Manual SKU mode me SKU required hai.';
     }
@@ -174,13 +194,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->prepare('
                     UPDATE products SET
                         name=?, slug=?, sku=?, sku_mode=?, category_id=?, subcategory_id=?, size_id=?, color_id=?,
-                        price=?, bv=?, mrp=?, discount_percent=?, offer_flash_text=?, offer_countdown=?, offer_bank_text=?,
+                        price=?, bv=?, package_id=?, mrp=?, discount_percent=?, offer_flash_text=?, offer_countdown=?, offer_bank_text=?,
                         stock_qty=?, description=?, thumbnail=?,
                         meta_title=?, meta_description=?, weight=?, length=?, width=?, height=?, status=?
                     WHERE id=?
                 ')->execute([
                     $name, $slug, $sku ?: null, $skuMode, $categoryId, $subcategoryId, $sizeId, $colorId,
-                    $price, $bv, $mrp, $discount, $offerFlash ?: null, $offerCountdown ?: null, $offerBank ?: null,
+                    $price, $bv, $packageId, $mrp, $discount, $offerFlash ?: null, $offerCountdown ?: null, $offerBank ?: null,
                     $stockQty, $description ?: null, $thumbPath,
                     $metaTitle ?: null, $metaDescription ?: null, $weight, $length, $width, $height, $status, $id
                 ]);
@@ -191,13 +211,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->prepare('
                     INSERT INTO products (
                         name, slug, sku, sku_mode, category_id, subcategory_id, size_id, color_id,
-                        price, bv, mrp, discount_percent, offer_flash_text, offer_countdown, offer_bank_text,
+                        price, bv, package_id, mrp, discount_percent, offer_flash_text, offer_countdown, offer_bank_text,
                         stock_qty, description, thumbnail,
                         meta_title, meta_description, weight, length, width, height, status
-                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ')->execute([
                     $name, $slug, $sku ?: null, $skuMode, $categoryId, $subcategoryId, $sizeId, $colorId,
-                    $price, $bv, $mrp, $discount, $offerFlash ?: null, $offerCountdown ?: null, $offerBank ?: null,
+                    $price, $bv, $packageId, $mrp, $discount, $offerFlash ?: null, $offerCountdown ?: null, $offerBank ?: null,
                     $stockQty, $description ?: null, $thumbPath,
                     $metaTitle ?: null, $metaDescription ?: null, $weight, $length, $width, $height, $status
                 ]);
@@ -548,10 +568,45 @@ require_once __DIR__ . '/../includes/header.php';
                             <input type="number" step="0.01" min="0" name="price" id="pfPrice" value="<?= e((string)$v('price', '0')) ?>" required>
                         </div>
                         <div class="form-group">
-                            <label>BV (Business Volume)</label>
-                            <input type="number" step="0.01" min="0" name="bv" id="pfBv" value="<?= e((string)$v('bv', '0')) ?>" placeholder="0.00">
-                            <!-- <p class="pf-help">Is product ka BV value — package / commission ke liye.</p> -->
+                            <label>PV (Point Value)</label>
+                            <input type="number" step="0.01" min="0" name="bv" id="pfPv" value="<?= e((string)$v('bv', '0')) ?>" placeholder="0.00">
+                            <p class="pf-help">Point Value credited on product purchase.</p>
                         </div>
+                        <?php if (!$productOnly): ?>
+                        <div class="form-group">
+                            <label>Activates package<?= $productActivates ? ' <span class="pf-auto-tag">ON</span>' : '' ?></label>
+                            <select name="package_id">
+                                <option value="">— None —</option>
+                                <?php foreach ($packages as $pkg): ?>
+                                <option value="<?= (int)$pkg['id'] ?>" <?= ((int)$v('package_id', 0) === (int)$pkg['id']) ? 'selected' : '' ?>>
+                                    <?= e($pkg['name']) ?> (<?= e(strip_tags(currency((float)$pkg['amount']))) ?>)
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <?php if ($productActivates): ?>
+                            <p class="pf-help">
+                                Product-to-package activation is enabled — buying this product can activate the linked package for the member.
+                                <?php if ($productMinActivate > 0): ?>
+                                Selling price must be at least <?= e(strip_tags(currency($productMinActivate))) ?> to qualify.
+                                <?php endif; ?>
+                            </p>
+                            <?php else: ?>
+                            <p class="pf-help">Link a package for when product-to-package activation is enabled on this install.</p>
+                            <?php endif; ?>
+                        </div>
+                        <?php else: ?>
+                        <div class="form-group">
+                            <label>Activation</label>
+                            <p class="pf-help" style="margin:0.35rem 0 0">
+                                Product Only mode — no starter plan link needed.
+                                <?php if ($productMinActivate > 0): ?>
+                                Members activate automatically when they buy a product priced at least <?= e(strip_tags(currency($productMinActivate))) ?>.
+                                <?php else: ?>
+                                Any product purchase can activate the member ID.
+                                <?php endif; ?>
+                            </p>
+                        </div>
+                        <?php endif; ?>
                         <div class="form-group">
                             <label>Discount % <span class="pf-auto-tag">Auto</span></label>
                             <input type="number" step="0.01" name="discount_percent" id="pfDiscount" value="<?= e((string)$v('discount_percent', '0')) ?>" readonly class="pf-readonly">

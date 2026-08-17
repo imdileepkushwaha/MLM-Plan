@@ -69,7 +69,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <th>Size</th>
                     <th>Color</th>
                     <th>Price</th>
-                    <th>BV</th>
+                    <th>PV</th>
                     <th>Stock</th>
                     <th>Status</th>
                     <th>Actions</th>

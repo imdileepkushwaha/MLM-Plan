@@ -9,46 +9,36 @@ if (!empty($_SESSION['admin_id'])) {
 }
 
 $error = '';
-$setupMsg = '';
-$setupOk = false;
 $flash = get_flash();
-$schema = mlm_schema_status($pdo);
-$needsSetup = !$schema['complete'];
+
+try {
+    $schema = mlm_schema_status($pdo);
+    $needsSetup = !$schema['complete'];
+} catch (Throwable $e) {
+    $needsSetup = true;
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['run_schema_setup'])) {
-        try {
-            $result = mlm_run_schema_setup($pdo);
-            $setupOk = $result['ok'];
-            $setupMsg = $result['message']
-                . ' Tables: ' . $result['tables']
-                . ', Procedures: ' . $result['procedures']
-                . '.';
-            if ($result['created']) {
-                $setupMsg .= ' Created: ' . implode(', ', $result['created']) . '.';
-            }
-            $schema = mlm_schema_status($pdo);
-            $needsSetup = !$schema['complete'];
-        } catch (Throwable $e) {
-            $error = 'Setup failed: ' . $e->getMessage();
-        }
+    $username = trim($_POST['username'] ?? '');
+    $password = $_POST['password'] ?? '';
+
+    if ($username === '' || $password === '') {
+        $error = 'Username and password are required.';
     } else {
-        $username = trim($_POST['username'] ?? '');
-        $password = $_POST['password'] ?? '';
+        try {
+            $stmt = $pdo->prepare('SELECT * FROM admins WHERE username = ? AND status = ? LIMIT 1');
+            $stmt->execute([$username, 'active']);
+            $admin = $stmt->fetch();
+        } catch (Throwable $e) {
+            $admin = false;
+            $error = 'System is not ready. Please contact support.';
+            $needsSetup = true;
+        }
 
-        if ($username === '' || $password === '') {
-            $error = 'Username and password are required.';
-        } else {
-            try {
-                $stmt = $pdo->prepare('SELECT * FROM admins WHERE username = ? AND status = ? LIMIT 1');
-                $stmt->execute([$username, 'active']);
-                $admin = $stmt->fetch();
-            } catch (Throwable $e) {
-                $admin = false;
-                $error = 'Database tables missing. Click “Setup Database” first.';
-            }
-
-            if (empty($error) && $admin && password_verify($password, $admin['password'])) {
+        if (empty($error) && $admin && password_verify($password, $admin['password'])) {
+            if (!client_license_ok()) {
+                $error = client_license_message() ?: 'Access is temporarily unavailable. Please contact support.';
+            } else {
                 $_SESSION['admin_id'] = $admin['id'];
                 $_SESSION['admin_name'] = $admin['full_name'];
                 $_SESSION['admin_username'] = $admin['username'];
@@ -60,9 +50,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 header('Location: index.php');
                 exit;
             }
-            if (empty($error)) {
-                $error = 'Invalid username or password.';
-            }
+        }
+        if (empty($error)) {
+            $error = 'Invalid username or password.';
         }
     }
 }
@@ -73,6 +63,8 @@ try {
     $company = 'Binary MLM';
     $needsSetup = true;
 }
+$logoUrl = function_exists('company_logo_url') ? company_logo_url() : null;
+$favUrl = function_exists('company_favicon_url') ? company_favicon_url() : null;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -80,30 +72,9 @@ try {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Login | <?= e($company) ?></title>
+    <?php if ($favUrl): ?><link rel="icon" href="<?= e($favUrl) ?>"><?php endif; ?>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../assets/css/admin.css">
-    <style>
-        .auth-setup-btn {
-            width: 100%;
-            margin-top: 0;
-            background: #0f172a;
-            color: #fff;
-            border: none;
-            border-radius: 12px;
-            padding: .85rem 1rem;
-            font-weight: 700;
-            cursor: pointer;
-        }
-        .auth-setup-btn:hover { background: #1e293b; }
-        .auth-setup-box {
-            background: #fff7ed;
-            border: 1px solid #fdba74;
-            border-radius: 14px;
-            padding: .9rem 1rem 1rem;
-            margin-bottom: 1rem;
-        }
-        .auth-setup-box .auth-sub { margin: 0 0 .75rem; color: #9a3412; font-size: .9rem; }
-    </style>
 </head>
 <body class="auth-page">
 <div class="auth-shell">
@@ -112,7 +83,11 @@ try {
         <div class="auth-brand-orb auth-brand-orb-b"></div>
         <div class="auth-brand-inner">
             <div class="auth-mark">
+                <?php if ($logoUrl): ?>
+                <img src="<?= e($logoUrl) ?>" alt="<?= e($company) ?>" style="width:100%;height:100%;object-fit:contain;border-radius:14px">
+                <?php else: ?>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                <?php endif; ?>
             </div>
             <p class="auth-kicker">Admin Panel</p>
             <h1 class="auth-company"><?= e($company) ?></h1>
@@ -130,22 +105,12 @@ try {
             <?php if (!empty($flash)): ?>
                 <div class="alert alert-<?= e($flash['type'] === 'success' ? 'success' : ($flash['type'] === 'error' ? 'error' : 'info')) ?> auth-alert"><?= e($flash['message']) ?></div>
             <?php endif; ?>
-            <?php if ($setupMsg): ?><div class="alert alert-<?= $setupOk ? 'success' : 'error' ?> auth-alert"><?= e($setupMsg) ?></div><?php endif; ?>
             <?php if ($error): ?><div class="alert alert-error auth-alert"><?= e($error) ?></div><?php endif; ?>
 
-            <?php if ($needsSetup): ?>
-            <div class="auth-setup-box">
-                <form method="post" onsubmit="return confirm('Create / update all missing tables and procedures now?');">
-                    <input type="hidden" name="run_schema_setup" value="1">
-                    <p class="auth-sub">Database incomplete (<?= (int) count($schema['missing']) ?> tables missing). One click installs all tables + procedures and sets admin / admin123.</p>
-                    <button type="submit" class="auth-setup-btn">Setup Database (Tables + Procedures)</button>
-                </form>
+            <?php if (!empty($needsSetup)): ?>
+            <div class="alert alert-info auth-alert">
+                System is not ready yet. Please contact support if you cannot sign in.
             </div>
-            <?php else: ?>
-            <form method="post" style="margin-bottom:1rem" onsubmit="return confirm('Reset admin password to admin123?');">
-                <input type="hidden" name="run_schema_setup" value="1">
-                <button type="submit" class="auth-setup-btn" style="background:#64748b;font-size:.85rem;padding:.65rem 1rem">Fix Admin Login (set password admin123)</button>
-            </form>
             <?php endif; ?>
 
             <form method="post" autocomplete="off" class="auth-form">
@@ -178,7 +143,6 @@ try {
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
                 </button>
             </form>
-            <p class="auth-foot" style="margin-top:1rem"><a href="../superadmin/login.php" style="color:#64748b;font-size:.85rem">Super Admin login</a></p>
         </div>
         <p class="auth-foot">&copy; <?= date('Y') ?> <?= e($company) ?></p>
     </div>

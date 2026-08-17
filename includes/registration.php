@@ -75,6 +75,30 @@ function reg_update_upline_counts(PDO $pdo, int $placementId, string $position):
     }
 }
 
+/** True when another member already uses this mobile (digit-normalized). */
+function reg_phone_exists(PDO $pdo, string $phone, ?int $excludeMemberId = null): bool
+{
+    $phoneDigits = preg_replace('/\D+/', '', $phone) ?? '';
+    if (strlen($phoneDigits) < 8) {
+        return false;
+    }
+    $sql = "SELECT id, phone FROM members WHERE phone IS NOT NULL AND phone != ''";
+    $params = [];
+    if ($excludeMemberId !== null && $excludeMemberId > 0) {
+        $sql .= ' AND id != ?';
+        $params[] = $excludeMemberId;
+    }
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    foreach ($stmt->fetchAll() as $row) {
+        $ex = preg_replace('/\D+/', '', (string) ($row['phone'] ?? '')) ?? '';
+        if ($ex !== '' && $ex === $phoneDigits) {
+            return true;
+        }
+    }
+    return false;
+}
+
 function reg_lookup_sponsor(PDO $pdo, string $code): ?array
 {
     $code = trim($code);
@@ -82,7 +106,7 @@ function reg_lookup_sponsor(PDO $pdo, string $code): ?array
         return null;
     }
     $stmt = $pdo->prepare("
-        SELECT id, member_id, full_name, username, status
+        SELECT id, member_id, full_name, username, status, package_id
         FROM members
         WHERE member_id = ? OR username = ?
         LIMIT 1
@@ -93,6 +117,15 @@ function reg_lookup_sponsor(PDO $pdo, string $code): ?array
         return null;
     }
     return $row;
+}
+
+/** True when member can act as sponsor (activated with package, not blocked). */
+function reg_sponsor_is_active(array $sponsor): bool
+{
+    if (($sponsor['status'] ?? '') === 'blocked') {
+        return false;
+    }
+    return !empty($sponsor['package_id']);
 }
 
 function reg_unique_username(PDO $pdo, string $fullName): string

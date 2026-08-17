@@ -16,18 +16,92 @@ $newsCount = (int) $pdo->query("SELECT COUNT(*) FROM news WHERE status = 'active
 $pendingComm = (int) $pdo->query("SELECT COUNT(*) FROM commissions WHERE status = 'pending'")->fetchColumn();
 
 $closingSummary = ['eligible_members' => 0, 'pairs' => 0, 'matched_bv' => 0, 'est_binary_gross' => 0];
-try {
-    closing_ensure_tables($pdo);
-    $closingSummary = closing_open_pair_summary($pdo);
-} catch (Throwable $e) {
-    // ignore
+$lastClosing = null;
+$showBinaryDash = plan_uses_binary();
+$showPackagesDash = feature_module_allowed('packages');
+$showWithdrawalsDash = feature_module_allowed('withdrawals');
+$showKycDash = feature_module_allowed('kyc');
+$showProductsDash = feature_module_allowed('products');
+$showActivationsDash = feature_module_allowed('activations') || feature_enabled('feature_utr_activation_enabled');
+
+$alertPendingKyc = 0;
+$alertPendingUtr = 0;
+$alertPendingWd = $showWithdrawalsDash ? $pendingWithdrawals : 0;
+$alertLowStock = 0;
+$stockThreshold = 5;
+
+if ($showKycDash) {
+    try {
+        $alertPendingKyc = (int) $pdo->query("SELECT COUNT(*) FROM member_kyc_documents WHERE status = 'pending'")->fetchColumn();
+    } catch (Throwable $e) {
+        $alertPendingKyc = 0;
+    }
+}
+if ($showActivationsDash) {
+    try {
+        $alertPendingUtr = (int) $pdo->query("SELECT COUNT(*) FROM activation_requests WHERE status = 'pending'")->fetchColumn();
+    } catch (Throwable $e) {
+        $alertPendingUtr = 0;
+    }
+}
+if ($showProductsDash) {
+    try {
+        $alertLowStock = (int) $pdo->query("SELECT COUNT(*) FROM products WHERE status = 'active' AND stock_qty <= {$stockThreshold}")->fetchColumn();
+    } catch (Throwable $e) {
+        $alertLowStock = 0;
+    }
 }
 
-$lastClosing = null;
-try {
-    $lastClosing = $pdo->query('SELECT * FROM closing_runs ORDER BY id DESC LIMIT 1')->fetch() ?: null;
-} catch (Throwable $e) {
-    $lastClosing = null;
+$dashAlerts = [];
+if ($alertPendingKyc > 0) {
+    $dashAlerts[] = [
+        'tone' => 'warn',
+        'label' => 'Pending KYC',
+        'count' => $alertPendingKyc,
+        'href' => 'approve-kyc.php?status=pending',
+        'hint' => 'Documents waiting for review',
+    ];
+}
+if ($alertPendingUtr > 0) {
+    $dashAlerts[] = [
+        'tone' => 'info',
+        'label' => 'Pending activations',
+        'count' => $alertPendingUtr,
+        'href' => 'activations.php?status=pending',
+        'hint' => 'UTR / package requests',
+    ];
+}
+if ($alertPendingWd > 0) {
+    $dashAlerts[] = [
+        'tone' => 'danger',
+        'label' => 'Open withdrawals',
+        'count' => $alertPendingWd,
+        'href' => 'withdrawals.php?status=pending',
+        'hint' => 'Awaiting approve / pay',
+    ];
+}
+if ($alertLowStock > 0) {
+    $dashAlerts[] = [
+        'tone' => 'stock',
+        'label' => 'Low stock',
+        'count' => $alertLowStock,
+        'href' => 'product-status.php',
+        'hint' => 'Qty ≤ ' . $stockThreshold,
+    ];
+}
+
+if ($showBinaryDash) {
+    try {
+        closing_ensure_tables($pdo);
+        $closingSummary = closing_open_pair_summary($pdo);
+    } catch (Throwable $e) {
+        // ignore
+    }
+    try {
+        $lastClosing = $pdo->query('SELECT * FROM closing_runs ORDER BY id DESC LIMIT 1')->fetch() ?: null;
+    } catch (Throwable $e) {
+        $lastClosing = null;
+    }
 }
 
 $recentMembers = $pdo->query("
@@ -55,6 +129,27 @@ $iconPackage = '<svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a
 $iconOut = '<svg viewBox="0 0 24 24"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>';
 ?>
 
+<?php if ($dashAlerts): ?>
+<div class="dash-alerts">
+    <div class="dash-alerts-head">
+        <strong>Needs attention</strong>
+        <span class="muted"><?= count($dashAlerts) ?> alert<?= count($dashAlerts) === 1 ? '' : 's' ?></span>
+    </div>
+    <div class="dash-alerts-grid">
+        <?php foreach ($dashAlerts as $al): ?>
+        <a class="dash-alert tone-<?= e($al['tone']) ?>" href="<?= e($al['href']) ?>">
+            <span class="dash-alert-count"><?= (int) $al['count'] ?></span>
+            <span class="dash-alert-copy">
+                <strong><?= e($al['label']) ?></strong>
+                <small><?= e($al['hint']) ?></small>
+            </span>
+            <span class="dash-alert-go" aria-hidden="true">→</span>
+        </a>
+        <?php endforeach; ?>
+    </div>
+</div>
+<?php endif; ?>
+
 <div class="stats-grid">
     <div class="stat-card g-blue">
         <div class="bg-icon"><?= $iconUsers ?></div>
@@ -80,6 +175,7 @@ $iconOut = '<svg viewBox="0 0 24 24"><polyline points="17 1 21 5 17 9"/><path d=
         <div class="label">Total Commissions</div>
         <a class="more" href="commissions.php">More info →</a>
     </div>
+    <?php if ($showWithdrawalsDash): ?>
     <div class="stat-card g-red">
         <div class="bg-icon"><?= $iconWallet ?></div>
         <div class="value"><?= $pendingWithdrawals ?></div>
@@ -92,18 +188,22 @@ $iconOut = '<svg viewBox="0 0 24 24"><polyline points="17 1 21 5 17 9"/><path d=
         <div class="label">Paid Out</div>
         <a class="more" href="withdrawals.php">More info →</a>
     </div>
+    <?php endif; ?>
     <div class="stat-card g-pink">
         <div class="bg-icon"><?= $iconWallet ?></div>
         <div class="value"><?= currency($walletTotal) ?></div>
         <div class="label">Wallet Balance</div>
         <a class="more" href="members.php">More info →</a>
     </div>
+    <?php if ($showPackagesDash): ?>
     <div class="stat-card g-purple">
         <div class="bg-icon"><?= $iconPackage ?></div>
         <div class="value"><?= $totalPackages ?></div>
         <div class="label">Active Packages</div>
         <a class="more" href="packages.php">More info →</a>
     </div>
+    <?php endif; ?>
+    <?php if ($showBinaryDash): ?>
     <div class="stat-card g-cyan">
         <div class="bg-icon"><?= $iconCheck ?></div>
         <div class="value"><?= number_format((float) $closingSummary['pairs'], 1) ?></div>
@@ -116,9 +216,10 @@ $iconOut = '<svg viewBox="0 0 24 24"><polyline points="17 1 21 5 17 9"/><path d=
         <div class="label">Est. Binary Gross</div>
         <a class="more" href="binary-closing.php">Preview →</a>
     </div>
+    <?php endif; ?>
 </div>
 
-<?php if ($lastClosing): ?>
+<?php if ($showBinaryDash && $lastClosing): ?>
 <div class="panel" style="margin-bottom:1.25rem">
     <div class="panel-body" style="display:flex;flex-wrap:wrap;gap:1rem;align-items:center;justify-content:space-between">
         <div>

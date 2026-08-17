@@ -1,7 +1,10 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../includes/team.php';
 $pageTitle = 'Downline';
 
+$useBinary = plan_uses_binary();
+$useMatrix = plan_uses_matrix();
 $search = trim($_GET['q'] ?? '');
 $leg = $_GET['leg'] ?? 'all';
 if (!in_array($leg, ['all', 'left', 'right'], true)) {
@@ -20,71 +23,29 @@ if ($search !== '') {
     }
 }
 
-/**
- * Collect placement downline (BFS) under a member.
- * @return array<int, array>
- */
-function collect_downline(PDO $pdo, int $rootId, string $leg = 'all'): array
-{
-    $list = [];
-    $queue = [];
-
-    if ($leg === 'all' || $leg === 'left') {
-        $queue[] = ['parent' => $rootId, 'position' => 'left', 'level' => 1, 'leg' => 'left'];
-    }
-    if ($leg === 'all' || $leg === 'right') {
-        $queue[] = ['parent' => $rootId, 'position' => 'right', 'level' => 1, 'leg' => 'right'];
-    }
-
-    $stmtChild = $pdo->prepare('SELECT id FROM members WHERE placement_id = ? AND position = ? LIMIT 1');
-    $stmtMember = $pdo->prepare("
-        SELECT m.id, m.member_id, m.full_name, m.username, m.phone, m.status, m.position,
-               m.left_count, m.right_count, m.join_date, m.wallet_balance,
-               p.name AS package_name,
-               s.member_id AS sponsor_mid, s.full_name AS sponsor_name
-        FROM members m
-        LEFT JOIN packages p ON p.id = m.package_id
-        LEFT JOIN members s ON s.id = m.sponsor_id
-        WHERE m.id = ?
-    ");
-
-    while ($queue) {
-        $item = array_shift($queue);
-        $stmtChild->execute([$item['parent'], $item['position']]);
-        $childId = $stmtChild->fetchColumn();
-        if (!$childId) {
-            continue;
-        }
-        $stmtMember->execute([(int) $childId]);
-        $member = $stmtMember->fetch();
-        if (!$member) {
-            continue;
-        }
-        $member['level'] = $item['level'];
-        $member['leg'] = $item['leg'];
-        $list[] = $member;
-
-        $queue[] = ['parent' => (int) $member['id'], 'position' => 'left', 'level' => $item['level'] + 1, 'leg' => $item['leg']];
-        $queue[] = ['parent' => (int) $member['id'], 'position' => 'right', 'level' => $item['level'] + 1, 'leg' => $item['leg']];
-    }
-
-    return $list;
-}
-
 $downline = [];
 $leftCount = 0;
 $rightCount = 0;
+$modeLabel = $useBinary ? 'Binary placement' : ($useMatrix ? 'Matrix placement' : 'Sponsor generations');
+$treeHref = $useBinary ? 'tree-view.php' : ($useMatrix ? 'matrix-tree.php' : 'level-tree.php');
+
 if ($root) {
-    if ($leg === 'all') {
-        $leftList = collect_downline($pdo, (int) $root['id'], 'left');
-        $rightList = collect_downline($pdo, (int) $root['id'], 'right');
+    $rid = (int) $root['id'];
+    if ($useBinary) {
+        $leftList = team_collect_downline($pdo, $rid, 'left');
+        $rightList = team_collect_downline($pdo, $rid, 'right');
         $leftCount = count($leftList);
         $rightCount = count($rightList);
-        $downline = array_merge($leftList, $rightList);
+        if ($leg === 'left') {
+            $downline = $leftList;
+        } elseif ($leg === 'right') {
+            $downline = $rightList;
+        } else {
+            $downline = array_merge($leftList, $rightList);
+        }
     } else {
-        $downline = collect_downline($pdo, (int) $root['id'], $leg);
-        $leftCount = $leg === 'left' ? count($downline) : count(collect_downline($pdo, (int) $root['id'], 'left'));
-        $rightCount = $leg === 'right' ? count($downline) : count(collect_downline($pdo, (int) $root['id'], 'right'));
+        $pack = team_collect_plan_downline($pdo, $rid, 'all');
+        $downline = $pack['rows'];
     }
 }
 
@@ -95,10 +56,10 @@ require_once __DIR__ . '/../includes/header.php';
     <div class="panel-header members-toolbar">
         <div>
             <h2>Downline</h2>
-            <p class="members-sub">Placement downline under a member</p>
+            <p class="members-sub"><?= e($modeLabel) ?> under a member</p>
         </div>
         <?php if ($root): ?>
-        <a href="tree-view.php?root=<?= (int) $root['id'] ?>" class="btn btn-outline btn-sm">Tree View</a>
+        <a href="<?= e($treeHref) ?>?<?= $useBinary || $useMatrix ? 'root=' . (int) $root['id'] : 'q=' . urlencode((string) $root['member_id']) ?>" class="btn btn-outline btn-sm">Tree View</a>
         <?php endif; ?>
     </div>
     <div class="panel-body members-filters">
@@ -107,6 +68,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <label>Member ID / Username</label>
                 <input type="text" name="q" value="<?= e($search) ?>" placeholder="<?= e(member_id_prefix() . str_pad('1', member_id_pad(), '0', STR_PAD_LEFT)) ?>">
             </div>
+            <?php if ($useBinary): ?>
             <div class="form-group">
                 <label>Leg</label>
                 <select name="leg">
@@ -115,6 +77,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <option value="right" <?= $leg === 'right' ? 'selected' : '' ?>>Right</option>
                 </select>
             </div>
+            <?php endif; ?>
             <button type="submit" class="btn btn-primary">Show Downline</button>
         </form>
     </div>
@@ -128,6 +91,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <span><?= e($root['full_name']) ?></span>
             </div>
         </div>
+        <?php if ($useBinary): ?>
         <div class="m-stat">
             <span class="m-stat-ico green">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/></svg>
@@ -146,13 +110,24 @@ require_once __DIR__ . '/../includes/header.php';
                 <span>Right Downline</span>
             </div>
         </div>
+        <?php else: ?>
+        <div class="m-stat">
+            <span class="m-stat-ico green">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+            </span>
+            <div>
+                <strong><?= team_direct_count($pdo, (int) $root['id']) ?></strong>
+                <span>Direct</span>
+            </div>
+        </div>
+        <?php endif; ?>
         <div class="m-stat">
             <span class="m-stat-ico red">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
             </span>
             <div>
                 <strong><?= count($downline) ?></strong>
-                <span><?= $leg === 'all' ? 'Total' : ucfirst($leg) ?> Shown</span>
+                <span><?= $useBinary && $leg !== 'all' ? ucfirst($leg) . ' Shown' : 'Total' ?></span>
             </div>
         </div>
     </div>
@@ -165,7 +140,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <th>#</th>
                     <th>Member</th>
                     <th>Level</th>
-                    <th>Leg</th>
+                    <?php if ($useBinary): ?><th>Leg</th><?php endif; ?>
                     <th>Position</th>
                     <th>Sponsor</th>
                     <th>Package</th>
@@ -175,9 +150,11 @@ require_once __DIR__ . '/../includes/header.php';
                 </tr>
             </thead>
             <tbody>
-            <?php if (!$root): ?>
+            <?php
+            $colspan = $useBinary ? 10 : 9;
+            if (!$root): ?>
                 <tr>
-                    <td colspan="10">
+                    <td colspan="<?= $colspan ?>">
                         <div class="empty-state">
                             <strong>No member found</strong>
                             <span>Search by Member ID or username.</span>
@@ -186,10 +163,10 @@ require_once __DIR__ . '/../includes/header.php';
                 </tr>
             <?php elseif (!$downline): ?>
                 <tr>
-                    <td colspan="10">
+                    <td colspan="<?= $colspan ?>">
                         <div class="empty-state">
                             <strong>No downline</strong>
-                            <span><?= e($root['full_name']) ?> has no members on this leg yet.</span>
+                            <span><?= e($root['full_name']) ?> has no team members yet.</span>
                         </div>
                     </td>
                 </tr>
@@ -203,21 +180,15 @@ require_once __DIR__ . '/../includes/header.php';
                         </div>
                     </td>
                     <td><span class="level-badge">L<?= (int) $m['level'] ?></span></td>
-                    <td><?= e(ucfirst($m['leg'])) ?></td>
-                    <td><?= e(ucfirst($m['position'] ?? '—')) ?></td>
-                    <td>
-                        <?php if (!empty($m['sponsor_mid'])): ?>
-                            <?= e($m['sponsor_mid']) ?>
-                        <?php else: ?>
-                            —
-                        <?php endif; ?>
-                    </td>
+                    <?php if ($useBinary): ?><td><?= e(ucfirst((string) $m['leg'])) ?></td><?php endif; ?>
+                    <td><?= e(ucfirst((string) ($m['position'] ?? '—'))) ?></td>
+                    <td><?= !empty($m['sponsor_mid']) ? e($m['sponsor_mid']) : '—' ?></td>
                     <td><?= e($m['package_name'] ?? '—') ?></td>
                     <td><?= status_badge($m['status']) ?></td>
                     <td><?= e(date('d M Y', strtotime($m['join_date']))) ?></td>
                     <td>
                         <div class="action-icons">
-                            <a href="tree-view.php?root=<?= (int) $m['id'] ?>" class="btn-icon" title="Tree"><?= icon_svg('package') ?></a>
+                            <a href="<?= e($treeHref) ?>?<?= $useBinary ? 'root=' . (int) $m['id'] : ($useMatrix ? 'member=' . urlencode((string) $m['member_id']) : 'q=' . urlencode((string) $m['member_id'])) ?>" class="btn-icon" title="Tree"><?= icon_svg('package') ?></a>
                             <a href="downline.php?q=<?= urlencode($m['member_id']) ?>" class="btn-icon" title="Downline"><?= icon_svg('view') ?></a>
                         </div>
                     </td>

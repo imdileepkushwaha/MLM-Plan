@@ -8,6 +8,8 @@ $modeLabel = [
     'hybrid' => 'Hybrid (Binary + Level)',
     'binary' => 'Binary only',
     'level' => 'Level only',
+    'unilevel' => 'Unilevel',
+    'matrix' => 'Matrix ' . matrix_width() . '×',
 ][$s['plan_mode']] ?? $s['plan_mode'];
 
 $modules = [
@@ -20,10 +22,13 @@ $modules = [
     ['UTR activation', $s['utr']],
     ['Wallet topup', $s['wallet_topup']],
     ['Product shop', $s['products']],
+    ['Product → activation', $s['product_activates']],
+    ['Product Only mode', !empty($s['product_only'])],
     ['Withdrawals', $s['withdrawals']],
     ['KYC', $s['kyc']],
 ];
 $onCount = count(array_filter(array_column($modules, 1)));
+$licenseOk = !empty($s['license_ok']);
 ?>
 <section class="sa-hero">
     <div>
@@ -33,7 +38,7 @@ $onCount = count(array_filter(array_column($modules, 1)));
     </div>
     <div class="sa-hero-actions">
         <a href="features.php" class="btn btn-primary">Configure features</a>
-        <a href="commission.php" class="btn-ghost">Commission rates</a>
+        <a href="license.php" class="btn-ghost">License</a>
     </div>
 </section>
 
@@ -51,6 +56,13 @@ $onCount = count(array_filter(array_column($modules, 1)));
         </span>
         <span class="sa-stat-label">Plan mode</span>
         <strong><?= e($modeLabel) ?></strong>
+    </article>
+    <article class="sa-stat">
+        <span class="sa-stat-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+        </span>
+        <span class="sa-stat-label">License</span>
+        <strong><?= $licenseOk ? 'Active' : 'Blocked' ?><?= !empty($s['license_expires']) ? ' · ' . e($s['license_expires']) : '' ?></strong>
     </article>
     <article class="sa-stat">
         <span class="sa-stat-ico" aria-hidden="true">

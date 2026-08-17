@@ -29,6 +29,8 @@ $prefills = wd_kyc_bank_prefills($pdo, $uid);
 $tdsPct = wd_tds_percent();
 $feePct = wd_fee_percent();
 $sampleBreak = wd_calc_breakdown($pdo, max($minAmt, 1000));
+$kycGate = wd_kyc_gate_check($pdo, $uid);
+$kycBlocked = !$kycGate['ok'];
 
 $allowedMethods = ['Bank Transfer', 'UPI', 'Other'];
 $form = [
@@ -43,6 +45,8 @@ if (!in_array($form['payment_method'], $allowedMethods, true)) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!wd_assert_enabled()) {
         $errors[] = 'Withdrawals are disabled for this client.';
+    } elseif ($kycBlocked) {
+        $errors[] = $kycGate['message'];
     } else {
         $amount = (float) ($_POST['amount'] ?? 0);
         $method = trim($_POST['payment_method'] ?? '');
@@ -67,6 +71,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         if ($details === '' || strlen($details) < 8) {
             $errors[] = 'Enter complete account / payout details.';
+        }
+
+        if (!$errors) {
+            // Re-check KYC gate at submit time
+            $kycGate = wd_kyc_gate_check($pdo, $uid);
+            if (!$kycGate['ok']) {
+                $errors[] = $kycGate['message'];
+            }
         }
 
         if (!$errors) {
@@ -157,11 +169,20 @@ require_once __DIR__ . '/includes/header.php';
                 <div class="up-alert up-alert-err"><?= e($err) ?></div>
             <?php endforeach; ?>
 
+            <?php if ($kycBlocked): ?>
+                <div class="up-alert up-alert-err">
+                    <?= e($kycGate['message']) ?>
+                    <div style="margin-top:0.5rem">
+                        <a href="kyc-pan.php" class="up-btn up-btn-outline" style="display:inline-flex">Go to KYC</a>
+                    </div>
+                </div>
+            <?php endif; ?>
+
             <?php if ($available < $minAmt): ?>
                 <div class="up-alert up-alert-info">Available balance is below the minimum withdrawal of <?= currency($minAmt) ?>.</div>
             <?php endif; ?>
 
-            <form method="post" class="wd-form" autocomplete="off" id="wdForm">
+            <form method="post" class="wd-form" autocomplete="off" id="wdForm"<?= $kycBlocked ? ' onsubmit="return false;"' : '' ?>>
                 <div class="wd-form-strip">
                     <div class="wd-form-chip">
                         <span class="wd-form-chip-ico" aria-hidden="true">
@@ -258,7 +279,7 @@ require_once __DIR__ . '/includes/header.php';
                     </div>
                     <div class="wd-form-actions">
                         <a href="withdrawal-report.php" class="up-btn up-btn-outline">Cancel</a>
-                        <button type="submit" class="up-btn up-btn-primary wd-submit" <?= $available < $minAmt ? 'disabled' : '' ?>>
+                        <button type="submit" class="up-btn up-btn-primary wd-submit" <?= ($available < $minAmt || $kycBlocked) ? 'disabled' : '' ?>>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
                             Submit Request
                         </button>

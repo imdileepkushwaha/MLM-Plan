@@ -183,6 +183,41 @@ function wd_status_pill(string $status): string
     return '<span class="wd-pill ' . $cls . '">' . e(ucfirst($s)) . '</span>';
 }
 
+/** True when Super Admin requires approved KYC before withdrawal requests. */
+function wd_require_kyc(): bool
+{
+    return feature_enabled('feature_kyc_enabled')
+        && feature_enabled('feature_withdraw_require_kyc', false);
+}
+
+/**
+ * Member may request withdrawal under KYC gate.
+ * @return array{ok:bool,status:string,message:string}
+ */
+function wd_kyc_gate_check(PDO $pdo, int $memberId): array
+{
+    if (!wd_require_kyc()) {
+        return ['ok' => true, 'status' => '', 'message' => ''];
+    }
+    $status = 'not_submitted';
+    try {
+        $stmt = $pdo->prepare('SELECT kyc_status FROM members WHERE id = ? LIMIT 1');
+        $stmt->execute([$memberId]);
+        $status = strtolower(trim((string) ($stmt->fetchColumn() ?: 'not_submitted')));
+    } catch (Throwable $e) {
+        $status = 'not_submitted';
+    }
+    if ($status === 'approved') {
+        return ['ok' => true, 'status' => $status, 'message' => ''];
+    }
+    $label = function_exists('kyc_status_label') ? kyc_status_label($status) : ucfirst($status);
+    return [
+        'ok' => false,
+        'status' => $status,
+        'message' => 'Complete and get KYC approved before requesting a withdrawal. Current status: ' . $label . '.',
+    ];
+}
+
 /** Prefill bank details from approved KYC bank doc if available. */
 function wd_kyc_bank_prefills(PDO $pdo, int $memberId): ?array
 {
@@ -210,5 +245,124 @@ function wd_kyc_bank_prefills(PDO $pdo, int $memberId): ?array
         ];
     } catch (Throwable $e) {
         return null;
+    }
+}
+
+/** Append-only payout audit trail (never update/delete from app). */
+function wd_ensure_payout_log_table(PDO $pdo): void
+{
+    static $done = false;
+    if ($done) {
+        return;
+    }
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS withdrawal_payout_logs (
+                id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                withdrawal_id INT UNSIGNED NOT NULL,
+                member_id INT UNSIGNED NOT NULL,
+                admin_id INT UNSIGNED NULL,
+                event_type VARCHAR(20) NOT NULL,
+                gross_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+                net_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+                tds_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+                fee_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+                other_deduction DECIMAL(12,2) NOT NULL DEFAULT 0,
+                payment_method VARCHAR(80) NULL,
+                account_details TEXT NULL,
+                payout_ref VARCHAR(120) NULL,
+                admin_note TEXT NULL,
+                ip_address VARCHAR(45) NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                KEY idx_wpl_withdrawal (withdrawal_id),
+                KEY idx_wpl_member (member_id),
+                KEY idx_wpl_created (created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ");
+    } catch (Throwable $e) {
+        // ignore
+    }
+    $done = true;
+}
+
+/**
+ * Immutable insert — do not expose UPDATE/DELETE for this table.
+ *
+ * @param array{
+ *   withdrawal_id:int,member_id:int,event_type:string,gross?:float,net?:float,
+ *   tds?:float,fee?:float,other?:float,payment_method?:?string,account_details?:?string,
+ *   payout_ref?:?string,admin_note?:?string,admin_id?:?int
+ * } $data
+ */
+function wd_payout_log_append(PDO $pdo, array $data): void
+{
+    wd_ensure_payout_log_table($pdo);
+    $event = strtolower(trim((string) ($data['event_type'] ?? '')));
+    if (!in_array($event, ['approve', 'reject', 'paid'], true)) {
+        return;
+    }
+    try {
+        $pdo->prepare("
+            INSERT INTO withdrawal_payout_logs
+                (withdrawal_id, member_id, admin_id, event_type, gross_amount, net_amount,
+                 tds_amount, fee_amount, other_deduction, payment_method, account_details,
+                 payout_ref, admin_note, ip_address)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ")->execute([
+            (int) ($data['withdrawal_id'] ?? 0),
+            (int) ($data['member_id'] ?? 0),
+            isset($data['admin_id']) ? (int) $data['admin_id'] : ($_SESSION['admin_id'] ?? null),
+            $event,
+            round((float) ($data['gross'] ?? 0), 2),
+            round((float) ($data['net'] ?? 0), 2),
+            round((float) ($data['tds'] ?? 0), 2),
+            round((float) ($data['fee'] ?? 0), 2),
+            round((float) ($data['other'] ?? 0), 2),
+            $data['payment_method'] ?? null,
+            $data['account_details'] ?? null,
+            $data['payout_ref'] ?? null,
+            $data['admin_note'] ?? null,
+            $_SERVER['REMOTE_ADDR'] ?? null,
+        ]);
+    } catch (Throwable $e) {
+        // never block payout flow on log failure
+    }
+}
+
+/** Build log payload from a withdrawals row. */
+function wd_payout_log_from_row(array $wd, string $event, string $note = '', string $payoutRef = ''): array
+{
+    return [
+        'withdrawal_id' => (int) ($wd['id'] ?? 0),
+        'member_id' => (int) ($wd['member_id'] ?? 0),
+        'event_type' => $event,
+        'gross' => (float) ($wd['amount'] ?? 0),
+        'net' => wd_net_display($wd),
+        'tds' => (float) ($wd['tds_amount'] ?? 0),
+        'fee' => (float) ($wd['fee_amount'] ?? 0),
+        'other' => (float) ($wd['other_deduction'] ?? 0),
+        'payment_method' => $wd['payment_method'] ?? null,
+        'account_details' => $wd['account_details'] ?? null,
+        'payout_ref' => $payoutRef !== '' ? $payoutRef : null,
+        'admin_note' => $note !== '' ? $note : ($wd['admin_note'] ?? null),
+    ];
+}
+
+/** @return list<array<string,mixed>> */
+function wd_payout_logs_recent(PDO $pdo, int $limit = 40): array
+{
+    wd_ensure_payout_log_table($pdo);
+    $limit = max(1, min(200, $limit));
+    try {
+        return $pdo->query("
+            SELECT l.*, a.username AS admin_username, m.full_name, m.member_id AS mid
+            FROM withdrawal_payout_logs l
+            LEFT JOIN admins a ON a.id = l.admin_id
+            LEFT JOIN members m ON m.id = l.member_id
+            ORDER BY l.id DESC
+            LIMIT {$limit}
+        ")->fetchAll() ?: [];
+    } catch (Throwable $e) {
+        return [];
     }
 }
