@@ -2,12 +2,14 @@
 require_once __DIR__ . '/config/database.php';
 
 $company = setting('company_name', 'Binary MLM');
+$logoUrl = company_logo_url();
+$favUrl = company_favicon_url();
 $formEnabled = setting('contact_form_enabled', '1') === '1';
 
 $contact = [
     'person' => setting('contact_person', 'Support Team'),
     'phone' => setting('contact_phone'),
-    'whatsapp' => preg_replace('/\D+/', '', setting('contact_whatsapp')),
+    'whatsapp' => preg_replace('/\D+/', '', (string) setting('contact_whatsapp')),
     'email' => setting('contact_email', setting('support_email', 'support@binarymlm.com')),
     'alt_phone' => setting('contact_alt_phone'),
     'address' => setting('contact_address'),
@@ -78,6 +80,10 @@ $social = array_filter([
     'YouTube' => $contact['youtube'],
     'Telegram' => $contact['telegram'],
 ]);
+
+$phone = (string) ($contact['phone'] ?? '');
+$whatsapp = (string) ($contact['whatsapp'] ?? '');
+$email = (string) ($contact['email'] ?? '');
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -85,149 +91,266 @@ $social = array_filter([
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Contact Us | <?= e($company) ?></title>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/css/admin.css">
-    <link rel="stylesheet" href="assets/css/contact.css">
+    <meta name="description" content="Contact <?= e($company) ?> — phone, WhatsApp, email, or send a message.">
+    <?php if ($favUrl): ?><link rel="icon" href="<?= e($favUrl) ?>"><?php endif; ?>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/landing.css?v=<?= (int) @filemtime(__DIR__ . '/assets/css/landing.css') ?>">
+    <link rel="stylesheet" href="assets/css/contact.css?v=<?= (int) @filemtime(__DIR__ . '/assets/css/contact.css') ?>">
 </head>
-<body class="contact-page">
-    <header class="contact-top">
-        <div class="contact-top-inner">
-            <a href="admin/login.php" class="contact-brand"><?= e($company) ?></a>
-            <nav>
-                <a href="admin/login.php">Admin Login</a>
-                <a href="member/index.php">Member</a>
-            </nav>
+<body class="lp lp-contact">
+    <div class="lp-grain" aria-hidden="true"></div>
+
+    <header class="lp-header is-scrolled" id="lpHeader">
+        <div class="lp-shell lp-header-inner">
+            <div class="lp-nav">
+                <a class="lp-brand" href="index.php">
+                    <?php if ($logoUrl): ?>
+                    <img src="<?= e($logoUrl) ?>" alt="<?= e($company) ?>" class="lp-brand-logo">
+                    <?php else: ?>
+                    <span class="lp-brand-mark" aria-hidden="true"></span>
+                    <span class="lp-brand-name"><?= e($company) ?></span>
+                    <?php endif; ?>
+                </a>
+                <nav class="lp-nav-links" aria-label="Primary">
+                    <a href="index.php#about">About</a>
+                    <a href="index.php#how">How it works</a>
+                    <a href="index.php#income">Income</a>
+                    <a href="index.php#stories">Stories</a>
+                    <a href="contact.php" aria-current="page">Contact</a>
+                    <a href="user/login.php" class="lp-nav-ghost">Member login</a>
+                    <a href="user/register.php" class="lp-nav-cta">Join now</a>
+                </nav>
+                <button type="button" class="lp-nav-toggle" id="lpNavToggle" aria-label="Open menu" aria-expanded="false">
+                    <span></span><span></span>
+                </button>
+            </div>
+            <div class="lp-drawer" id="lpDrawer" hidden>
+                <a href="index.php#about">About</a>
+                <a href="index.php#how">How it works</a>
+                <a href="index.php#income">Income</a>
+                <a href="index.php#stories">Stories</a>
+                <a href="contact.php">Contact</a>
+                <a href="user/login.php">Member login</a>
+                <a href="user/register.php" class="lp-nav-cta">Join now</a>
+            </div>
         </div>
     </header>
 
-    <main class="contact-main">
-        <div class="contact-hero">
-            <h1>Contact Us</h1>
-            <p>Reach <?= e($contact['person'] ?: $company) ?> — we are happy to help.</p>
-        </div>
+    <main>
+        <section class="lp-contact-hero">
+            <div class="lp-contact-hero-stage" aria-hidden="true">
+                <div class="lp-contact-hero-wash"></div>
+            </div>
+            <div class="lp-shell lp-contact-hero-inner">
+                <p class="lp-kicker lp-contact-kicker">Contact</p>
+                <h1>Talk to <?= e($company) ?></h1>
+                <p class="lp-contact-lead">Reach <?= e($contact['person'] ?: 'our team') ?> — questions on registration, activation, or support.</p>
+            </div>
+        </section>
 
-        <div class="contact-layout">
-            <aside class="contact-info-card">
-                <h2>Get in touch</h2>
-                <?php if ($contact['person']): ?>
-                <div class="ci-row">
-                    <span class="ci-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
-                    <div>
-                        <strong>Contact Person</strong>
-                        <span><?= e($contact['person']) ?></span>
-                    </div>
-                </div>
-                <?php endif; ?>
-                <?php if ($contact['phone']): ?>
-                <div class="ci-row">
-                    <span class="ci-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg></span>
-                    <div>
-                        <strong>Phone</strong>
-                        <span><a href="tel:<?= e(preg_replace('/\s+/', '', $contact['phone'])) ?>"><?= e($contact['phone']) ?></a></span>
-                    </div>
-                </div>
-                <?php endif; ?>
-                <?php if ($contact['whatsapp']): ?>
-                <div class="ci-row">
-                    <span class="ci-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg></span>
-                    <div>
-                        <strong>WhatsApp</strong>
-                        <span><a href="https://wa.me/<?= e($contact['whatsapp']) ?>" target="_blank" rel="noopener">Chat on WhatsApp</a></span>
-                    </div>
-                </div>
-                <?php endif; ?>
-                <?php if ($contact['email']): ?>
-                <div class="ci-row">
-                    <span class="ci-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></span>
-                    <div>
-                        <strong>Email</strong>
-                        <span><a href="mailto:<?= e($contact['email']) ?>"><?= e($contact['email']) ?></a></span>
-                    </div>
-                </div>
-                <?php endif; ?>
-                <?php if ($contact['alt_phone']): ?>
-                <div class="ci-row">
-                    <span class="ci-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg></span>
-                    <div>
-                        <strong>Alternate</strong>
-                        <span><?= e($contact['alt_phone']) ?></span>
-                    </div>
-                </div>
-                <?php endif; ?>
-                <?php if ($fullAddress): ?>
-                <div class="ci-row">
-                    <span class="ci-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg></span>
-                    <div>
-                        <strong>Address</strong>
-                        <span><?= e($fullAddress) ?></span>
-                        <?php if ($contact['map_url']): ?>
-                        <a class="map-link" href="<?= e($contact['map_url']) ?>" target="_blank" rel="noopener">Open in Maps</a>
+        <section class="lp-section lp-contact-body">
+            <div class="lp-shell">
+                <div class="lp-contact-layout">
+                    <aside class="lp-contact-reach">
+                        <p class="lp-kicker lp-kicker-dark">Get in touch</p>
+                        <h2>Direct lines</h2>
+                        <p class="lp-contact-reach-sub">Prefer a quick reply? Use phone, WhatsApp, or email below.</p>
+
+                        <div class="lp-contact-rows">
+                            <?php if ($contact['person']): ?>
+                            <div class="lp-contact-row">
+                                <span class="lp-contact-row-label">Contact person</span>
+                                <span class="lp-contact-row-value"><?= e($contact['person']) ?></span>
+                            </div>
+                            <?php endif; ?>
+                            <?php if ($contact['phone']): ?>
+                            <a class="lp-contact-row" href="tel:<?= e(preg_replace('/\s+/', '', $contact['phone'])) ?>">
+                                <span class="lp-contact-row-label">Phone</span>
+                                <span class="lp-contact-row-value"><?= e($contact['phone']) ?></span>
+                            </a>
+                            <?php endif; ?>
+                            <?php if ($contact['whatsapp']): ?>
+                            <a class="lp-contact-row" href="https://wa.me/<?= e($contact['whatsapp']) ?>" target="_blank" rel="noopener">
+                                <span class="lp-contact-row-label">WhatsApp</span>
+                                <span class="lp-contact-row-value">Chat with support</span>
+                            </a>
+                            <?php endif; ?>
+                            <?php if ($contact['email']): ?>
+                            <a class="lp-contact-row" href="mailto:<?= e($contact['email']) ?>">
+                                <span class="lp-contact-row-label">Email</span>
+                                <span class="lp-contact-row-value"><?= e($contact['email']) ?></span>
+                            </a>
+                            <?php endif; ?>
+                            <?php if ($contact['alt_phone']): ?>
+                            <div class="lp-contact-row">
+                                <span class="lp-contact-row-label">Alternate</span>
+                                <span class="lp-contact-row-value"><?= e($contact['alt_phone']) ?></span>
+                            </div>
+                            <?php endif; ?>
+                            <?php if ($fullAddress): ?>
+                            <div class="lp-contact-row">
+                                <span class="lp-contact-row-label">Address</span>
+                                <span class="lp-contact-row-value"><?= e($fullAddress) ?></span>
+                                <?php if ($contact['map_url']): ?>
+                                <a class="lp-contact-map" href="<?= e($contact['map_url']) ?>" target="_blank" rel="noopener">Open in Maps →</a>
+                                <?php endif; ?>
+                            </div>
+                            <?php endif; ?>
+                            <?php if ($contact['hours']): ?>
+                            <div class="lp-contact-row">
+                                <span class="lp-contact-row-label">Hours</span>
+                                <span class="lp-contact-row-value"><?= e($contact['hours']) ?></span>
+                            </div>
+                            <?php endif; ?>
+                        </div>
+
+                        <?php if ($social): ?>
+                        <div class="lp-contact-social">
+                            <?php foreach ($social as $label => $url): ?>
+                            <a href="<?= e($url) ?>" target="_blank" rel="noopener"><?= e($label) ?></a>
+                            <?php endforeach; ?>
+                        </div>
                         <?php endif; ?>
-                    </div>
-                </div>
-                <?php endif; ?>
-                <?php if ($contact['hours']): ?>
-                <div class="ci-row">
-                    <span class="ci-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
-                    <div>
-                        <strong>Hours</strong>
-                        <span><?= e($contact['hours']) ?></span>
-                    </div>
-                </div>
-                <?php endif; ?>
+                    </aside>
 
-                <?php if ($social): ?>
-                <div class="contact-social">
-                    <?php foreach ($social as $label => $url): ?>
-                    <a href="<?= e($url) ?>" target="_blank" rel="noopener"><?= e($label) ?></a>
-                    <?php endforeach; ?>
-                </div>
-                <?php endif; ?>
-            </aside>
+                    <section class="lp-contact-form-panel" aria-labelledby="contact-form-title">
+                        <p class="lp-kicker lp-kicker-dark">Message</p>
+                        <h2 id="contact-form-title">Send a message</h2>
 
-            <section class="contact-form-card">
-                <h2>Send a message</h2>
-                <?php if (!$formEnabled): ?>
-                    <div class="alert alert-info">Contact form is currently disabled. Please use phone or email.</div>
-                <?php elseif ($success): ?>
-                    <div class="alert alert-success">Thank you! Your message has been sent. Our team will contact you soon.</div>
-                    <a href="contact.php" class="btn btn-outline">Send another message</a>
-                <?php else: ?>
-                    <?php if ($errors): ?>
-                    <div class="alert alert-error"><?= e(implode(' ', $errors)) ?></div>
-                    <?php endif; ?>
-                    <form method="post" class="contact-form">
-                        <div class="form-grid">
-                            <div class="form-group">
-                                <label>Your Name *</label>
-                                <input type="text" name="name" value="<?= e($_POST['name'] ?? '') ?>" required>
-                            </div>
-                            <div class="form-group">
-                                <label>Email *</label>
-                                <input type="email" name="email" value="<?= e($_POST['email'] ?? '') ?>" required>
-                            </div>
-                            <div class="form-group">
-                                <label>Phone</label>
-                                <input type="text" name="phone" value="<?= e($_POST['phone'] ?? '') ?>">
-                            </div>
-                            <div class="form-group">
-                                <label>Subject</label>
-                                <input type="text" name="subject" value="<?= e($_POST['subject'] ?? '') ?>">
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label>Message *</label>
-                            <textarea name="message" rows="5" required><?= e($_POST['message'] ?? '') ?></textarea>
-                        </div>
-                        <button type="submit" class="btn btn-primary">Send Message</button>
-                    </form>
-                <?php endif; ?>
-            </section>
-        </div>
+                        <?php if (!$formEnabled): ?>
+                            <div class="lp-alert lp-alert-info">Contact form is currently disabled. Please use phone or email.</div>
+                        <?php elseif ($success): ?>
+                            <div class="lp-alert lp-alert-ok">Thank you! Your message has been sent. Our team will contact you soon.</div>
+                            <a href="contact.php" class="lp-btn lp-btn-primary">Send another message</a>
+                        <?php else: ?>
+                            <?php if ($errors): ?>
+                            <div class="lp-alert lp-alert-err"><?= e(implode(' ', $errors)) ?></div>
+                            <?php endif; ?>
+                            <form method="post" class="lp-contact-form">
+                                <div class="lp-contact-form-grid">
+                                    <label class="lp-field">
+                                        <span>Your name *</span>
+                                        <input type="text" name="name" value="<?= e($_POST['name'] ?? '') ?>" required>
+                                    </label>
+                                    <label class="lp-field">
+                                        <span>Email *</span>
+                                        <input type="email" name="email" value="<?= e($_POST['email'] ?? '') ?>" required>
+                                    </label>
+                                    <label class="lp-field">
+                                        <span>Phone</span>
+                                        <input type="text" name="phone" value="<?= e($_POST['phone'] ?? '') ?>">
+                                    </label>
+                                    <label class="lp-field">
+                                        <span>Subject</span>
+                                        <input type="text" name="subject" value="<?= e($_POST['subject'] ?? '') ?>">
+                                    </label>
+                                </div>
+                                <label class="lp-field">
+                                    <span>Message *</span>
+                                    <textarea name="message" rows="5" required><?= e($_POST['message'] ?? '') ?></textarea>
+                                </label>
+                                <button type="submit" class="lp-btn lp-btn-primary">Send message</button>
+                            </form>
+                        <?php endif; ?>
+                    </section>
+                </div>
+            </div>
+        </section>
     </main>
 
-    <footer class="contact-foot">
-        &copy; <?= date('Y') ?> <?= e($company) ?>. All rights reserved.
+    <footer class="lp-foot">
+        <div class="lp-foot-glow" aria-hidden="true"></div>
+        <div class="lp-shell">
+            <div class="lp-foot-intro">
+                <div class="lp-foot-brand-block">
+                    <?php if ($logoUrl): ?>
+                    <img src="<?= e($logoUrl) ?>" alt="<?= e($company) ?>" class="lp-foot-logo">
+                    <?php endif; ?>
+                    <strong class="lp-foot-brand"><?= e($company) ?></strong>
+                    <p>Network marketing for members and leaders who want clarity, structure, and steady growth.</p>
+                </div>
+                <a href="user/register.php" class="lp-foot-join">
+                    <span>Join the network</span>
+                    <span class="lp-foot-join-arrow" aria-hidden="true">→</span>
+                </a>
+            </div>
+
+            <div class="lp-foot-grid">
+                <nav class="lp-foot-col" aria-label="Explore">
+                    <h3>Explore</h3>
+                    <a href="index.php#about">About</a>
+                    <a href="index.php#how">How it works</a>
+                    <a href="index.php#income">Income plans</a>
+                    <a href="index.php#stories">Member stories</a>
+                </nav>
+                <nav class="lp-foot-col" aria-label="Members">
+                    <h3>Members</h3>
+                    <a href="user/register.php">Register</a>
+                    <a href="user/login.php">Member login</a>
+                    <a href="contact.php">Contact</a>
+                    <a href="admin/login.php">Admin login</a>
+                </nav>
+                <div class="lp-foot-col lp-foot-reach">
+                    <h3>Reach us</h3>
+                    <?php if ($phone !== ''): ?>
+                    <a href="tel:<?= e(preg_replace('/\s+/', '', $phone)) ?>">
+                        <span class="lp-foot-reach-label">Phone</span>
+                        <span class="lp-foot-reach-value"><?= e($phone) ?></span>
+                    </a>
+                    <?php endif; ?>
+                    <?php if ($whatsapp !== ''): ?>
+                    <a href="https://wa.me/<?= e($whatsapp) ?>" target="_blank" rel="noopener">
+                        <span class="lp-foot-reach-label">WhatsApp</span>
+                        <span class="lp-foot-reach-value">Chat with support</span>
+                    </a>
+                    <?php endif; ?>
+                    <?php if ($email !== ''): ?>
+                    <a href="mailto:<?= e($email) ?>">
+                        <span class="lp-foot-reach-label">Email</span>
+                        <span class="lp-foot-reach-value"><?= e($email) ?></span>
+                    </a>
+                    <?php endif; ?>
+                    <?php if ($phone === '' && $whatsapp === '' && $email === ''): ?>
+                    <a href="contact.php">
+                        <span class="lp-foot-reach-label">Support</span>
+                        <span class="lp-foot-reach-value">Open contact form</span>
+                    </a>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="lp-foot-bottom">
+                <span>&copy; <?= date('Y') ?> <?= e($company) ?>. All rights reserved.</span>
+                <a href="index.php">Back to home</a>
+            </div>
+        </div>
     </footer>
+
+    <script>
+    (function () {
+        var header = document.getElementById('lpHeader');
+        var btn = document.getElementById('lpNavToggle');
+        var drawer = document.getElementById('lpDrawer');
+
+        if (header) header.classList.add('is-scrolled');
+
+        if (btn && drawer) {
+            btn.addEventListener('click', function () {
+                var open = drawer.hasAttribute('hidden');
+                if (open) drawer.removeAttribute('hidden');
+                else drawer.setAttribute('hidden', '');
+                btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+            });
+            drawer.querySelectorAll('a').forEach(function (a) {
+                a.addEventListener('click', function () {
+                    drawer.setAttribute('hidden', '');
+                    btn.setAttribute('aria-expanded', 'false');
+                });
+            });
+        }
+    })();
+    </script>
 </body>
 </html>

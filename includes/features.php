@@ -805,7 +805,16 @@ function branding_asset_url(?string $path): ?string
     if (!is_file($full)) {
         return null;
     }
-    return '../' . $rel;
+    // Admin/user/superadmin live one folder deep → "../uploads/..."
+    // Root pages (index/contact) need "uploads/..."
+    $script = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+    $baseName = str_replace('\\', '/', BASE_PATH);
+    $inSubdir = (bool) preg_match('#/(admin|user|superadmin|member)(/|$)#i', $script);
+    if (!$inSubdir && isset($_SERVER['SCRIPT_FILENAME'])) {
+        $dir = str_replace('\\', '/', dirname((string) $_SERVER['SCRIPT_FILENAME']));
+        $inSubdir = (rtrim($dir, '/') !== rtrim($baseName, '/'));
+    }
+    return ($inSubdir ? '../' : '') . $rel;
 }
 
 function company_logo_url(): ?string
