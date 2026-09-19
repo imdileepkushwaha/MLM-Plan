@@ -24,6 +24,7 @@ $saIco = static function (string $path): string {
 $icoDash = $saIco('<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>');
 $icoFeat = $saIco('<path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>');
 $icoMoney = $saIco('<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>');
+$icoCloseSched = $saIco('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>');
 $icoBrand = $saIco('<path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/>');
 $icoLicense = $saIco('<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/><circle cx="12" cy="16" r="1"/>');
 $icoSettings = $saIco('<circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>');
@@ -79,6 +80,9 @@ $favUrl = company_favicon_url();
                 </a>
                 <a href="commission.php" class="nav-link <?= $currentPage === 'commission' ? 'active' : '' ?>">
                     <span class="nav-link-left"><?= $icoMoney ?><span class="nav-label">Commission Rates</span></span>
+                </a>
+                <a href="closing-schedule.php" class="nav-link <?= $currentPage === 'closing-schedule' ? 'active' : '' ?>">
+                    <span class="nav-link-left"><?= $icoCloseSched ?><span class="nav-label">Closing Schedule</span></span>
                 </a>
                 <a href="branding.php" class="nav-link <?= $currentPage === 'branding' ? 'active' : '' ?>">
                     <span class="nav-link-left"><?= $icoBrand ?><span class="nav-label">Client Branding</span></span>

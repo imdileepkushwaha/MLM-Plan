@@ -38,14 +38,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $password = $_POST['password'] ?? '';
 
         if ($login === '' || $password === '') {
-            $error = 'Username / email and password are required.';
+            $error = 'Member ID and password are required.';
         } else {
             $stmt = $pdo->prepare('
                 SELECT * FROM members
-                WHERE (username = ? OR email = ? OR member_id = ?)
+                WHERE member_id = ?
                 LIMIT 1
             ');
-            $stmt->execute([$login, $login, $login]);
+            $stmt->execute([$login]);
             $member = $stmt->fetch();
 
             clear_setting_cache('maintenance_mode');
@@ -67,7 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     exit;
                 }
             } else {
-                $error = 'Invalid username or password.';
+                $error = 'Invalid Member ID or password.';
             }
         }
     }
@@ -129,13 +129,14 @@ if ($flash && $flash['type'] === 'error' && (
     </aside>
 
     <main class="ulog-main">
+        <a href="../index.php" class="ulog-home">← Back to home</a>
         <p class="ulog-kicker">Member access</p>
         <?php if ($logoUrl): ?>
         <img class="ulog-logo" src="<?= e($logoUrl) ?>" alt="<?= e($company) ?>">
         <?php endif; ?>
         <p class="ulog-brand"><?= e($company) ?></p>
         <h1 class="ulog-title">Sign in to your network desk</h1>
-        <p class="ulog-lead">Use your member ID, username, or email to continue.</p>
+        <p class="ulog-lead">Use your Member ID to continue.</p>
 
         <?php if ($flash):
             $ftype = $flash['type'] === 'success' ? 'ok' : ($flash['type'] === 'error' ? 'err' : 'info');
@@ -149,8 +150,8 @@ if ($flash && $flash['type'] === 'error' && (
 
         <form method="post" class="ulog-form" autocomplete="off"<?= $portalLocked ? ' inert' : '' ?>>
             <div class="ulog-field">
-                <label for="login">Username / Email / Member ID</label>
-                <input type="text" id="login" name="login" value="<?= e($_POST['login'] ?? '') ?>" placeholder="member001 or you@email.com" required<?= $portalLocked ? ' disabled' : ' autofocus' ?>>
+                <label for="login">Member ID</label>
+                <input type="text" id="login" name="login" value="<?= e($_POST['login'] ?? '') ?>" placeholder="Your Member ID" required<?= $portalLocked ? ' disabled' : ' autofocus' ?>>
             </div>
 
             <div class="ulog-field">

@@ -1,24 +1,60 @@
 <?php
 /**
  * Database Configuration - Binary MLM
- * Local (localhost) → XAMPP defaults
- * Live server → online DB credentials
+ * Credentials: config/db-credentials.php (Super Admin → Settings → Online & Offline DB)
+ * Fallback: built-in online / offline defaults with Auto mode.
  */
 $hostName = $_SERVER['HTTP_HOST'] ?? 'localhost';
 $isLocal = (bool) preg_match('/^(localhost|127\.0\.0\.1)(:\d+)?$/i', $hostName);
 
-if ($isLocal) {
-    define('DB_HOST', 'localhost');
-    define('DB_NAME', 'binarymlm_db');
-    define('DB_USER', 'root');
-    define('DB_PASS', '');
-} else {
-    define('DB_HOST', 'localhost');
-    define('DB_NAME', 'mlmplan_db');
-    define('DB_USER', 'mlmplan_db');
-    define('DB_PASS', 'Tf&pW4vhzxMf2%6j');
+require_once __DIR__ . '/../includes/db_admin.php';
+
+$__dbCreds = db_admin_load_credentials();
+$__dbAttempts = db_admin_connection_attempts($isLocal, $__dbCreds);
+$__dbLastError = 'Database connection failed.';
+$pdo = null;
+$__dbActive = null;
+
+foreach ($__dbAttempts as $__attempt) {
+    $__try = db_admin_try_pdo($__attempt);
+    if ($__try['ok'] && $__try['pdo'] instanceof PDO) {
+        $pdo = $__try['pdo'];
+        $__dbActive = $__attempt;
+        break;
+    }
+    $__dbLastError = $__try['message'];
 }
-define('DB_CHARSET', 'utf8mb4');
+
+if (!$pdo || !$__dbActive) {
+    die('Database connection failed: ' . htmlspecialchars($__dbLastError));
+}
+
+if (!defined('DB_HOST')) {
+    define('DB_HOST', (string) $__dbActive['host']);
+}
+if (!defined('DB_PORT')) {
+    define('DB_PORT', (string) ($__dbActive['port'] ?? '3306'));
+}
+if (!defined('DB_NAME')) {
+    define('DB_NAME', (string) $__dbActive['name']);
+}
+if (!defined('DB_USER')) {
+    define('DB_USER', (string) $__dbActive['user']);
+}
+if (!defined('DB_PASS')) {
+    define('DB_PASS', (string) $__dbActive['pass']);
+}
+if (!defined('DB_CHARSET')) {
+    define('DB_CHARSET', 'utf8mb4');
+}
+if (!defined('DB_ACTIVE_SIDE')) {
+    define('DB_ACTIVE_SIDE', (string) ($__dbActive['side'] ?? 'offline'));
+}
+if (!defined('DB_CONNECTION_MODE')) {
+    define('DB_CONNECTION_MODE', (string) ($__dbCreds['mode'] ?? 'auto'));
+}
+
+unset($__dbCreds, $__dbAttempts, $__dbLastError, $__dbActive, $__attempt, $__try);
 
 $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
 define('APP_NAME', 'Binary MLM Admin');
@@ -29,17 +65,6 @@ date_default_timezone_set('Asia/Kolkata');
 
 if (!headers_sent()) {
     header('Content-Type: text/html; charset=utf-8');
-}
-
-try {
-    $dsn = 'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=' . DB_CHARSET;
-    $pdo = new PDO($dsn, DB_USER, DB_PASS, [
-        PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        PDO::ATTR_EMULATE_PREPARES   => false,
-    ]);
-} catch (PDOException $e) {
-    die('Database connection failed: ' . htmlspecialchars($e->getMessage()));
 }
 
 if (session_status() === PHP_SESSION_NONE) {

@@ -48,6 +48,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $summary = closing_open_pair_summary($pdo);
 $binaryEnabled = setting('binary_income_enabled', '1') === '1';
 $matchingPct = (float) setting('matching_commission_percent', '0');
+$scheduleCfg = closing_schedule_config();
+$scheduleNext = closing_schedule_next_run($scheduleCfg);
+$scheduleLabel = closing_schedule_label($scheduleCfg);
 $adminCharge = (float) setting('daily_closing_admin_charge', '0');
 
 $history = [];
@@ -108,6 +111,26 @@ require_once __DIR__ . '/../includes/header.php';
     <?php if (!$binaryEnabled): ?>
         <div class="cls-alert">Binary income is disabled for this install.</div>
     <?php endif; ?>
+
+    <div class="cls-schedule <?= !empty($scheduleCfg['enabled']) ? 'is-on' : 'is-off' ?>">
+        <div class="cls-schedule-main">
+            <span class="cls-schedule-kicker">Auto schedule</span>
+            <strong><?= e($scheduleLabel) ?></strong>
+            <?php if (!empty($scheduleCfg['enabled']) && $scheduleNext): ?>
+                <span class="cls-schedule-next">Next ≈ <?= e($scheduleNext->format('D, d M Y · H:i')) ?> (<?= e($scheduleCfg['timezone']) ?>)</span>
+            <?php elseif (empty($scheduleCfg['enabled'])): ?>
+                <span class="cls-schedule-next">Super Admin can enable daily/weekly auto closing.</span>
+            <?php endif; ?>
+        </div>
+        <?php if (!empty($scheduleCfg['enabled']) && $scheduleCfg['last_run_at'] !== ''): ?>
+            <div class="cls-schedule-meta">
+                Last auto: <?= e($scheduleCfg['last_run_at']) ?>
+                <?php if ($scheduleCfg['last_message'] !== ''): ?>
+                    · <?= e($scheduleCfg['last_message']) ?>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
+    </div>
 
     <div class="rpt-stats">
         <article class="rpt-stat">

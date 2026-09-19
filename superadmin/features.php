@@ -292,6 +292,7 @@ $switch = static function (string $name, string $label, string $hint, bool $on, 
             <?= $switch('feature_withdraw_require_kyc', 'Withdrawal requires KYC', 'Block withdrawal requests until member KYC is fully approved', feature_enabled('feature_withdraw_require_kyc', false)) ?>
             <?= $switch('feature_utility_enabled', 'Utility management', 'Geo, banks, news & helpers', feature_enabled('feature_utility_enabled')) ?>
             <?= $switch('feature_reports_enabled', 'Reports', 'Admin commission & activity reports', feature_enabled('feature_reports_enabled')) ?>
+            <?= $switch('feature_franchise_enabled', 'Franchisee Master', 'Show Franchisee Master module in Client Admin (types, add, report, purchase, stock)', feature_enabled('feature_franchise_enabled')) ?>
         </div>
 
         <div class="sa-form-actions">

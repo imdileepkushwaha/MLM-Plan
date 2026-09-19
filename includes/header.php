@@ -22,10 +22,11 @@ $featKyc = feature_module_allowed('kyc');
 $featUtility = feature_module_allowed('utility');
 $featReports = feature_module_allowed('reports');
 $featBinaryClosing = feature_module_allowed('binary_closing');
+$featFranchise = feature_module_allowed('franchise');
 
 $utilityPages = [
     'countries', 'states', 'cities', 'banks', 'bank-accounts',
-    'news', 'plans', 'package-plans', 'direct-member-login',
+    'news', 'direct-member-login',
 ];
 $utilityOpen = in_array($currentPage, $utilityPages, true);
 
@@ -41,6 +42,12 @@ $productPages = [
     'product-orders', 'stock-report', 'vendors', 'stock-purchase', 'purchase-details', 'commodity-prices',
 ];
 $productOpen = in_array($currentPage, $productPages, true);
+
+$franchisePages = [
+    'franchisee-types', 'franchisee-add', 'franchisee-report',
+    'franchisee-purchase', 'franchisee-purchase-report', 'franchisee-stock',
+];
+$franchiseOpen = in_array($currentPage, $franchisePages, true);
 
 $packagePages = ['packages', 'package-assign-products'];
 $packageOpen = in_array($currentPage, $packagePages, true);
@@ -98,6 +105,7 @@ $icoMoney = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-w
 $icoCard = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>';
 $icoChart = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>';
 $icoGear = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
+$icoFranchise = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/><path d="M9 10h.01M15 10h.01"/></svg>';
 
 $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="6 9 12 15 18 9"/></svg>';
 ?>
@@ -197,10 +205,6 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
                         <a href="banks.php" class="<?= $currentPage === 'banks' ? 'active' : '' ?>"><span class="dot"></span>Add Bank</a>
                         <a href="bank-accounts.php" class="<?= $currentPage === 'bank-accounts' ? 'active' : '' ?>"><span class="dot"></span>Bank Account Add</a>
                         <a href="news.php" class="<?= $currentPage === 'news' ? 'active' : '' ?>"><span class="dot"></span>News Add</a>
-                        <?php if ($featPackages): ?>
-                        <a href="plans.php" class="<?= $currentPage === 'plans' ? 'active' : '' ?>"><span class="dot"></span>Add Plan</a>
-                        <a href="package-plans.php" class="<?= $currentPage === 'package-plans' ? 'active' : '' ?>"><span class="dot"></span>Package Plan Master</a>
-                        <?php endif; ?>
                         <a href="direct-member-login.php" class="<?= $currentPage === 'direct-member-login' ? 'active' : '' ?>"><span class="dot"></span>Direct Member Login</a>
                     </div>
                 </div>
@@ -231,6 +235,26 @@ $chevronDown = '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke=
                         <a href="stock-purchase.php" class="<?= $currentPage === 'stock-purchase' ? 'active' : '' ?>"><span class="dot"></span>Stock Purchase</a>
                         <a href="purchase-details.php" class="<?= $currentPage === 'purchase-details' ? 'active' : '' ?>"><span class="dot"></span>Purchase Details</a>
                         <a href="commodity-prices.php" class="<?= $currentPage === 'commodity-prices' ? 'active' : '' ?>"><span class="dot"></span>Add Commodities Price</a>
+                    </div>
+                </div>
+                <?php endif; ?>
+
+                <?php if ($featFranchise): ?>
+                <div class="nav-group <?= $franchiseOpen ? 'open' : '' ?>" data-nav-group>
+                    <button type="button" class="nav-link nav-group-toggle <?= $franchiseOpen ? 'active' : '' ?>" data-nav-toggle>
+                        <span class="nav-link-left">
+                            <?= nav_ico($icoFranchise) ?>
+                            <span class="nav-label">Franchisee Master</span>
+                        </span>
+                        <?= $chevronDown ?>
+                    </button>
+                    <div class="nav-submenu">
+                        <a href="franchisee-types.php" class="<?= $currentPage === 'franchisee-types' ? 'active' : '' ?>"><span class="dot"></span>Franchisee Type Master</a>
+                        <a href="franchisee-add.php" class="<?= $currentPage === 'franchisee-add' ? 'active' : '' ?>"><span class="dot"></span>Franchisee Add</a>
+                        <a href="franchisee-report.php" class="<?= $currentPage === 'franchisee-report' ? 'active' : '' ?>"><span class="dot"></span>Franchisee Report</a>
+                        <a href="franchisee-purchase.php" class="<?= $currentPage === 'franchisee-purchase' ? 'active' : '' ?>"><span class="dot"></span>Product Purchase</a>
+                        <a href="franchisee-purchase-report.php" class="<?= $currentPage === 'franchisee-purchase-report' ? 'active' : '' ?>"><span class="dot"></span>Product Purchase Report</a>
+                        <a href="franchisee-stock.php" class="<?= $currentPage === 'franchisee-stock' ? 'active' : '' ?>"><span class="dot"></span>Stock Details</a>
                     </div>
                 </div>
                 <?php endif; ?>

@@ -14,19 +14,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$member) {
         $error = 'Active member not found.';
     } else {
-        // Keep admin session; open member session separately
-        $_SESSION['member_id'] = $member['id'];
-        $_SESSION['member_code'] = $member['member_id'];
-        $_SESSION['member_name'] = $member['full_name'];
-        $_SESSION['member_login_by_admin'] = true;
-        $_SESSION['member_login_admin_id'] = $_SESSION['admin_id'] ?? null;
-        session_touch('member');
+        // Same session keys as user/login.php — real user panel access
+        $_SESSION['user_id'] = (int) $member['id'];
+        $_SESSION['user_name'] = $member['full_name'];
+        $_SESSION['user_code'] = $member['member_id'];
+        $_SESSION['user_login_by_admin'] = true;
+        $_SESSION['user_login_admin_id'] = $_SESSION['admin_id'] ?? null;
+        session_touch('user');
+
+        // Keep admin session alive in the original tab
         if (!empty($_SESSION['admin_id'])) {
             session_touch('admin');
         }
 
         log_activity('direct_member_login', 'Admin logged in as ' . $member['member_id']);
-        header('Location: ../member/index.php');
+        header('Location: ../user/index.php');
         exit;
     }
 }
@@ -50,7 +52,7 @@ require_once __DIR__ . '/../includes/header.php';
     <div class="panel-header"><h2>Direct Member Login</h2></div>
     <div class="panel-body">
         <p style="color:var(--ink-muted);margin-bottom:1rem;font-size:0.9rem">
-            Select a member to open their dashboard as admin (impersonation). Your admin session stays active.
+            Login as member opens the real user dashboard in a <strong>new tab</strong>. Your admin session stays in this tab.
         </p>
         <?php if ($error): ?><div class="alert alert-error"><?= e($error) ?></div><?php endif; ?>
 
@@ -86,9 +88,9 @@ require_once __DIR__ . '/../includes/header.php';
                     <td><?= e($m['email']) ?></td>
                     <td><?= currency((float)$m['wallet_balance']) ?></td>
                     <td>
-                        <form method="post" style="display:inline">
+                        <form method="post" target="_blank" rel="noopener" style="display:inline">
                             <input type="hidden" name="member_id" value="<?= (int)$m['id'] ?>">
-                            <button type="submit" class="btn btn-accent btn-sm" data-confirm="Login as <?= e($m['member_id']) ?>?">Login as Member</button>
+                            <button type="submit" class="btn btn-accent btn-sm" data-confirm="Login as <?= e($m['member_id']) ?> in a new tab?">Login as Member</button>
                         </form>
                     </td>
                 </tr>

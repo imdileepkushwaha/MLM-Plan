@@ -726,3 +726,222 @@ function closing_open_pair_summary(PDO $pdo): array
         'flush_pairs' => $flush,
     ];
 }
+
+/** @return array<int, string> ISO weekday 1=Mon … 7=Sun */
+function closing_schedule_weekdays(): array
+{
+    return [
+        1 => 'Monday',
+        2 => 'Tuesday',
+        3 => 'Wednesday',
+        4 => 'Thursday',
+        5 => 'Friday',
+        6 => 'Saturday',
+        7 => 'Sunday',
+    ];
+}
+
+/**
+ * @return array{
+ *   enabled:bool,frequency:string,weekday:int,time:string,timezone:string,
+ *   last_slot:string,last_run_at:string,last_message:string,cron_token:string
+ * }
+ */
+function closing_schedule_config(): array
+{
+    $freq = strtolower(setting('closing_auto_frequency', 'daily'));
+    if (!in_array($freq, ['daily', 'weekly'], true)) {
+        $freq = 'daily';
+    }
+    $time = trim(setting('closing_auto_time', '00:00'));
+    if (!preg_match('/^\d{1,2}:\d{2}$/', $time)) {
+        $time = '00:00';
+    }
+
+    return [
+        'enabled' => setting('closing_auto_enabled', '0') === '1',
+        'frequency' => $freq,
+        'weekday' => max(1, min(7, (int) setting('closing_auto_weekday', '1'))),
+        'time' => strlen($time) === 4 ? '0' . $time : $time,
+        'timezone' => setting('closing_auto_timezone', 'Asia/Kolkata') ?: 'Asia/Kolkata',
+        'last_slot' => setting('closing_auto_last_slot', ''),
+        'last_run_at' => setting('closing_auto_last_run_at', ''),
+        'last_message' => setting('closing_auto_last_message', ''),
+        'cron_token' => setting('closing_auto_cron_token', ''),
+    ];
+}
+
+function closing_schedule_ensure_token(PDO $pdo, bool $regenerate = false): string
+{
+    $token = setting('closing_auto_cron_token', '');
+    if ($regenerate || $token === '') {
+        $token = bin2hex(random_bytes(24));
+        feature_save($pdo, 'closing_auto_cron_token', $token);
+        clear_setting_cache();
+    }
+    return $token;
+}
+
+/** @param array<string,mixed>|null $cfg */
+function closing_schedule_timezone(?array $cfg = null): DateTimeZone
+{
+    $cfg = $cfg ?? closing_schedule_config();
+    $name = (string) ($cfg['timezone'] ?? 'Asia/Kolkata');
+    try {
+        return new DateTimeZone($name);
+    } catch (Throwable $e) {
+        return new DateTimeZone('Asia/Kolkata');
+    }
+}
+
+/** @param array<string,mixed>|null $cfg */
+function closing_schedule_now(?array $cfg = null): DateTimeImmutable
+{
+    return new DateTimeImmutable('now', closing_schedule_timezone($cfg));
+}
+
+/** @return array{0:int,1:int} */
+function closing_schedule_parse_time(string $time): array
+{
+    if (!preg_match('/^(\d{1,2}):(\d{2})$/', $time, $m)) {
+        return [0, 0];
+    }
+    return [max(0, min(23, (int) $m[1])), max(0, min(59, (int) $m[2]))];
+}
+
+/**
+ * Slot id (Y-m-d) for the most recent schedule moment that is already due.
+ * @param array<string,mixed>|null $cfg
+ */
+function closing_schedule_due_slot(?DateTimeImmutable $now = null, ?array $cfg = null): ?string
+{
+    $cfg = $cfg ?? closing_schedule_config();
+    if (empty($cfg['enabled'])) {
+        return null;
+    }
+    $now = $now ?? closing_schedule_now($cfg);
+    [$h, $min] = closing_schedule_parse_time((string) $cfg['time']);
+
+    if (($cfg['frequency'] ?? 'daily') === 'weekly') {
+        $targetDow = max(1, min(7, (int) $cfg['weekday']));
+        $nowDow = (int) $now->format('N');
+        $daysBack = ($nowDow - $targetDow + 7) % 7;
+        $slotDay = $now->modify('-' . $daysBack . ' days')->setTime($h, $min, 0);
+        if ($now < $slotDay) {
+            $slotDay = $slotDay->modify('-7 days');
+        }
+        return $slotDay->format('Y-m-d');
+    }
+
+    $slotDay = $now->setTime($h, $min, 0);
+    if ($now < $slotDay) {
+        $slotDay = $slotDay->modify('-1 day');
+    }
+    return $slotDay->format('Y-m-d');
+}
+
+/** @param array<string,mixed>|null $cfg */
+function closing_schedule_next_run(?array $cfg = null): ?DateTimeImmutable
+{
+    $cfg = $cfg ?? closing_schedule_config();
+    if (empty($cfg['enabled'])) {
+        return null;
+    }
+    $now = closing_schedule_now($cfg);
+    [$h, $min] = closing_schedule_parse_time((string) $cfg['time']);
+
+    if (($cfg['frequency'] ?? 'daily') === 'weekly') {
+        $targetDow = max(1, min(7, (int) $cfg['weekday']));
+        $nowDow = (int) $now->format('N');
+        $daysAhead = ($targetDow - $nowDow + 7) % 7;
+        $next = $now->modify('+' . $daysAhead . ' days')->setTime($h, $min, 0);
+        if ($next <= $now) {
+            $next = $next->modify('+7 days');
+        }
+        return $next;
+    }
+
+    $next = $now->setTime($h, $min, 0);
+    if ($next <= $now) {
+        $next = $next->modify('+1 day');
+    }
+    return $next;
+}
+
+/** @param array<string,mixed>|null $cfg */
+function closing_schedule_is_due(?array $cfg = null): bool
+{
+    $cfg = $cfg ?? closing_schedule_config();
+    if (empty($cfg['enabled'])) {
+        return false;
+    }
+    if (!plan_uses_binary() || setting('binary_income_enabled', '1') !== '1') {
+        return false;
+    }
+    $slot = closing_schedule_due_slot(null, $cfg);
+    if ($slot === null) {
+        return false;
+    }
+    return $slot !== (string) ($cfg['last_slot'] ?? '');
+}
+
+/**
+ * Run binary closing when the configured schedule slot is due.
+ *
+ * @return array{ok:bool,skipped:bool,slot:?string,message:string,result:?array}
+ */
+function closing_schedule_run_auto(PDO $pdo, bool $force = false): array
+{
+    $cfg = closing_schedule_config();
+    if (!$force && empty($cfg['enabled'])) {
+        return ['ok' => false, 'skipped' => true, 'slot' => null, 'message' => 'Auto closing is disabled.', 'result' => null];
+    }
+
+    $slot = closing_schedule_due_slot(null, $cfg);
+    if (!$force) {
+        if ($slot === null || $slot === (string) ($cfg['last_slot'] ?? '')) {
+            return ['ok' => true, 'skipped' => true, 'slot' => $slot, 'message' => 'Not due yet.', 'result' => null];
+        }
+        if (!plan_uses_binary() || setting('binary_income_enabled', '1') !== '1') {
+            return ['ok' => false, 'skipped' => true, 'slot' => $slot, 'message' => 'Binary income is disabled.', 'result' => null];
+        }
+    }
+
+    if ($slot === null) {
+        $slot = closing_schedule_now($cfg)->format('Y-m-d');
+    }
+
+    $result = closing_run_binary($pdo, null, true);
+    $msg = (string) ($result['message'] ?? '');
+    $nowStr = closing_schedule_now($cfg)->format('Y-m-d H:i:s');
+
+    feature_save($pdo, 'closing_auto_last_slot', $slot);
+    feature_save($pdo, 'closing_auto_last_run_at', $nowStr);
+    feature_save($pdo, 'closing_auto_last_message', $msg);
+    clear_setting_cache();
+
+    return [
+        'ok' => !empty($result['ok']),
+        'skipped' => false,
+        'slot' => $slot,
+        'message' => $msg,
+        'result' => $result,
+    ];
+}
+
+/** Human-readable schedule summary for Admin / Super Admin. */
+function closing_schedule_label(?array $cfg = null): string
+{
+    $cfg = $cfg ?? closing_schedule_config();
+    if (empty($cfg['enabled'])) {
+        return 'Auto closing is off';
+    }
+    $time = (string) $cfg['time'];
+    $tz = (string) $cfg['timezone'];
+    if (($cfg['frequency'] ?? 'daily') === 'weekly') {
+        $days = closing_schedule_weekdays();
+        $day = $days[(int) $cfg['weekday']] ?? 'Monday';
+        return 'Every ' . $day . ' at ' . $time . ' (' . $tz . ')';
+    }
+    return 'Daily at ' . $time . ' (' . $tz . ')';
+}

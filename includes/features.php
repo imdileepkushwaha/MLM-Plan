@@ -47,10 +47,22 @@ function feature_defaults(): array
         'feature_withdraw_require_kyc' => '0',
         'feature_utility_enabled' => '1',
         'feature_reports_enabled' => '1',
+        'feature_franchise_enabled' => '1',
 
         // Meta
         'feature_preset' => 'hybrid_full',
         'client_locked_note' => 'Commission rates and module switches are not editable here.',
+
+        // Auto binary closing schedule (Super Admin)
+        'closing_auto_enabled' => '0',
+        'closing_auto_frequency' => 'daily',
+        'closing_auto_weekday' => '1',
+        'closing_auto_time' => '00:00',
+        'closing_auto_timezone' => 'Asia/Kolkata',
+        'closing_auto_cron_token' => '',
+        'closing_auto_last_slot' => '',
+        'closing_auto_last_run_at' => '',
+        'closing_auto_last_message' => '',
     ];
 }
 
@@ -81,6 +93,7 @@ function feature_presets(): array
                 'feature_kyc_enabled' => '1',
                 'feature_utility_enabled' => '1',
                 'feature_reports_enabled' => '1',
+                'feature_franchise_enabled' => '1',
             ],
         ],
         'binary_package_tpin' => [
@@ -416,6 +429,7 @@ function feature_save_from_post(PDO $pdo, array $post): void
         'feature_withdraw_require_kyc',
         'feature_utility_enabled',
         'feature_reports_enabled',
+        'feature_franchise_enabled',
     ];
 
     // Remember selection before writes (clear_setting_cache may run later)
@@ -518,8 +532,6 @@ function feature_admin_page_map(): array
         'report-binary-closing' => 'binary_closing',
         'packages' => 'packages',
         'package-assign-products' => 'packages',
-        'package-plans' => 'packages',
-        'plans' => 'packages',
         'activations' => 'activations',
         'tpin' => 'tpin',
         'tpin-transfer' => 'tpin',
@@ -555,6 +567,12 @@ function feature_admin_page_map(): array
         'report-package-sales' => 'reports',
         'report-top-earners' => 'reports',
         'tds-report' => 'reports',
+        'franchisee-types' => 'franchise',
+        'franchisee-add' => 'franchise',
+        'franchisee-report' => 'franchise',
+        'franchisee-purchase' => 'franchise',
+        'franchisee-purchase-report' => 'franchise',
+        'franchisee-stock' => 'franchise',
     ];
 }
 
@@ -624,6 +642,8 @@ function feature_module_allowed(string $module): bool
             return feature_enabled('feature_utility_enabled');
         case 'reports':
             return feature_enabled('feature_reports_enabled');
+        case 'franchise':
+            return feature_enabled('feature_franchise_enabled');
         case 'income_binary':
             return plan_uses_binary();
         case 'income_level':
@@ -678,6 +698,7 @@ function feature_summary(): array
         'utr' => feature_enabled('feature_utr_activation_enabled'),
         'wallet_topup' => feature_enabled('feature_wallet_topup_enabled'),
         'products' => feature_enabled('feature_product_shop_enabled'),
+        'franchise' => feature_enabled('feature_franchise_enabled'),
         'product_activates' => feature_enabled('feature_product_activates_package'),
         'product_only' => feature_product_only_activation(),
         'product_min_amount' => product_activate_min_amount(),

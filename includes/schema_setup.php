@@ -65,6 +65,8 @@ function mlm_expected_tables(): array
         'password_resets', 'member_kyc_documents', 'member_kyc_upi', 'activation_requests',
         'bv_credits', 'closing_runs', 'closing_items', 'package_products',
         'super_admins', 'withdrawal_payout_logs',
+        'franchisee_types', 'franchisees', 'franchisee_purchases',
+        'franchisee_purchase_items', 'franchisee_stock',
     ];
 }
 
@@ -127,6 +129,13 @@ function mlm_run_schema_setup(PDO $pdo): array
         require_once dirname(__DIR__) . '/includes/withdrawal.php';
         wd_ensure_payout_log_table($pdo);
         wd_ensure_columns($pdo);
+    } catch (Throwable $e) {
+        // ignore
+    }
+
+    try {
+        require_once dirname(__DIR__) . '/includes/franchise.php';
+        franchise_ensure_tables($pdo);
     } catch (Throwable $e) {
         // ignore
     }
