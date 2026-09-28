@@ -99,6 +99,10 @@ function session_clear_scope(string $scope): void
             'member_id', 'member_code', 'member_name',
             'member_login_by_admin', 'member_login_admin_id', 'member_last_activity',
         ],
+        'franchise' => [
+            'franchise_id', 'franchise_code', 'franchise_name', 'franchise_type',
+            'franchise_login_by_admin', 'franchise_last_activity',
+        ],
     ];
     foreach ($map[$scope] ?? [] as $key) {
         unset($_SESSION[$key]);

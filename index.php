@@ -385,6 +385,7 @@ $email = setting('contact_email', setting('support_email', ''));
                     <h3>Members</h3>
                     <a href="user/register.php">Register</a>
                     <a href="user/login.php">Member login</a>
+                    <a href="franchise/login.php">Franchise login</a>
                     <a href="contact.php">Contact</a>
                     <a href="admin/login.php">Admin login</a>
                 </nav>

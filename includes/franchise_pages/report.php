@@ -69,6 +69,7 @@ franchise_header();
                     <th>Name</th>
                     <th>Type</th>
                     <th>Phone</th>
+                    <th>GST No</th>
                     <th>City</th>
                     <th>Status</th>
                     <th>Actions</th>
@@ -76,20 +77,29 @@ franchise_header();
             </thead>
             <tbody>
             <?php if (!$rows): ?>
-                <tr><td colspan="7">No franchisees found.</td></tr>
+                <tr><td colspan="8">No franchisees found.</td></tr>
             <?php else: foreach ($rows as $r): ?>
                 <tr>
                     <td><strong><?= e($r['franchisee_code']) ?></strong></td>
-                    <td><?= e($r['name']) ?></td>
+                    <td>
+                        <?= e($r['name']) ?>
+                        <?php if (!empty($r['username'])): ?>
+                            <br><small style="color:#64748b">User: <?= e($r['username']) ?></small>
+                        <?php endif; ?>
+                    </td>
                     <td><?= e($r['type_name'] ?? '—') ?></td>
                     <td><?= e($r['phone'] ?? '—') ?></td>
+                    <td><?= !empty($r['gst_no']) ? '<code>' . e($r['gst_no']) . '</code>' : '<span style="color:#94a3b8">—</span>' ?></td>
                     <td><?= e($r['city'] ?? '—') ?></td>
                     <td><?= status_badge($r['status']) ?></td>
                     <td>
-                        <div class="action-icons">
+                        <div class="action-icons" style="align-items:center">
                             <?= action_edit('franchisee-add.php?edit=' . (int) $r['id']) ?>
                             <?= action_toggle('?toggle=' . (int) $r['id'], $r['status']) ?>
                             <?= action_delete('?delete=' . (int) $r['id'], 'Delete this franchisee?') ?>
+                            <?php if (($r['status'] ?? '') === 'active'): ?>
+                                <a href="direct-franchise-login.php?id=<?= (int) $r['id'] ?>" target="_blank" class="btn btn-primary btn-sm" style="padding:0.25rem 0.6rem;font-size:0.75rem;white-space:nowrap;margin-left:0.35rem" title="Login directly to franchise portal in new tab">Login ↗</a>
+                            <?php endif; ?>
                         </div>
                     </td>
                 </tr>

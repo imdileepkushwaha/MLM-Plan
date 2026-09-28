@@ -24,6 +24,7 @@ $modules = [
     ['Product shop', $s['products']],
     ['Product → activation', $s['product_activates']],
     ['Product Only mode', !empty($s['product_only'])],
+    ['Franchise Only mode', !empty($s['franchise_only'])],
     ['Franchisee Master', !empty($s['franchise'])],
     ['Withdrawals', $s['withdrawals']],
     ['KYC', $s['kyc']],

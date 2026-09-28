@@ -48,6 +48,7 @@ function feature_defaults(): array
         'feature_utility_enabled' => '1',
         'feature_reports_enabled' => '1',
         'feature_franchise_enabled' => '1',
+        'feature_franchise_only' => '0',
 
         // Meta
         'feature_preset' => 'hybrid_full',
@@ -251,6 +252,30 @@ function feature_presets(): array
                 'feature_reports_enabled' => '1',
             ],
         ],
+        'franchise_only' => [
+            'label' => 'Franchise Only',
+            'description' => 'Dedicated Multi-Tier Franchise & Distribution model (BHEO, Super Distributor, Distributor, Retailer). Inventory, stock purchase, billing & franchise margins. MLM package/binary/level rails off.',
+            'settings' => [
+                'plan_mode' => 'level',
+                'feature_package_enabled' => '0',
+                'feature_tpin_enabled' => '0',
+                'feature_utr_activation_enabled' => '0',
+                'feature_wallet_topup_enabled' => '0',
+                'feature_product_shop_enabled' => '1',
+                'feature_product_activates_package' => '0',
+                'feature_product_only_activation' => '0',
+                'feature_franchise_only' => '1',
+                'feature_binary_income' => '0',
+                'feature_level_income' => '0',
+                'feature_referral_income' => '0',
+                'feature_matching_income' => '0',
+                'feature_withdrawals_enabled' => '1',
+                'feature_kyc_enabled' => '1',
+                'feature_utility_enabled' => '1',
+                'feature_reports_enabled' => '1',
+                'feature_franchise_enabled' => '1',
+            ],
+        ],
     ];
 }
 
@@ -290,6 +315,18 @@ function feature_ensure_defaults(PDO $pdo): void
             feature_save($pdo, 'feature_package_enabled', '0');
             feature_save($pdo, 'feature_tpin_enabled', '0');
             feature_save($pdo, 'feature_utr_activation_enabled', '0');
+        } elseif (setting('feature_preset', '') === 'franchise_only') {
+            feature_save($pdo, 'feature_franchise_only', '1');
+            feature_save($pdo, 'feature_franchise_enabled', '1');
+            feature_save($pdo, 'feature_package_enabled', '0');
+            feature_save($pdo, 'feature_tpin_enabled', '0');
+            feature_save($pdo, 'feature_utr_activation_enabled', '0');
+            feature_save($pdo, 'feature_wallet_topup_enabled', '0');
+            feature_save($pdo, 'feature_product_shop_enabled', '1');
+            feature_save($pdo, 'feature_binary_income', '0');
+            feature_save($pdo, 'feature_level_income', '0');
+            feature_save($pdo, 'feature_referral_income', '0');
+            feature_save($pdo, 'feature_matching_income', '0');
         }
     } catch (Throwable $e) {
         // ignore
@@ -346,6 +383,9 @@ function feature_apply_preset(PDO $pdo, string $presetKey, ?array $overrides = n
     }
 
     $settings = $presets[$presetKey]['settings'];
+    if (!isset($settings['feature_franchise_only'])) {
+        $settings['feature_franchise_only'] = '0';
+    }
     if ($overrides) {
         $settings = array_merge($settings, $overrides);
     }
@@ -430,6 +470,7 @@ function feature_save_from_post(PDO $pdo, array $post): void
         'feature_utility_enabled',
         'feature_reports_enabled',
         'feature_franchise_enabled',
+        'feature_franchise_only',
     ];
 
     // Remember selection before writes (clear_setting_cache may run later)
@@ -452,9 +493,26 @@ function feature_save_from_post(PDO $pdo, array $post): void
     }
 
     $productOnly = isset($post['feature_product_only_activation']);
+    $franchiseOnly = isset($post['feature_franchise_only']);
+
+    if ($franchiseOnly) {
+        feature_save($pdo, 'feature_franchise_only', '1');
+        feature_save($pdo, 'feature_franchise_enabled', '1');
+        feature_save($pdo, 'feature_package_enabled', '0');
+        feature_save($pdo, 'feature_tpin_enabled', '0');
+        feature_save($pdo, 'feature_utr_activation_enabled', '0');
+        feature_save($pdo, 'feature_wallet_topup_enabled', '0');
+        feature_save($pdo, 'feature_product_shop_enabled', '1');
+        feature_save($pdo, 'feature_binary_income', '0');
+        feature_save($pdo, 'feature_level_income', '0');
+        feature_save($pdo, 'feature_referral_income', '0');
+        feature_save($pdo, 'feature_matching_income', '0');
+    } elseif ($previousPreset === 'franchise_only' && !$franchiseOnly) {
+        feature_save($pdo, 'feature_franchise_only', '0');
+    }
 
     // Product-only mode: shop activates by product value — force packages/UTR/T-PIN off
-    if ($productOnly) {
+    if ($productOnly && !$franchiseOnly) {
         feature_save($pdo, 'feature_product_shop_enabled', '1');
         feature_save($pdo, 'feature_product_activates_package', '1');
         feature_save($pdo, 'feature_product_only_activation', '1');
@@ -494,15 +552,17 @@ function feature_save_from_post(PDO $pdo, array $post): void
     feature_save($pdo, 'binary_income_enabled', feature_enabled('feature_binary_income') ? '1' : '0');
     feature_save($pdo, 'level_income_enabled', feature_enabled('feature_level_income') ? '1' : '0');
 
-    // Keep last applied preset selected. Only switch badge when Product Only is explicitly on/off.
+    // Keep last applied preset selected.
     $presets = feature_presets();
-    if ($productOnly) {
+    if ($franchiseOnly) {
+        feature_save($pdo, 'feature_preset', 'franchise_only');
+    } elseif ($productOnly) {
         feature_save($pdo, 'feature_preset', 'product_only');
-    } elseif ($previousPreset === 'product_only') {
-        // Left Product Only — pick a preset matching current plan_mode
+    } elseif ($previousPreset === 'franchise_only' || $previousPreset === 'product_only') {
+        // Left Franchise Only / Product Only — pick a preset matching current plan_mode
         $fallback = 'hybrid_full';
         foreach ($presets as $pkey => $p) {
-            if ($pkey === 'product_only') {
+            if ($pkey === 'product_only' || $pkey === 'franchise_only') {
                 continue;
             }
             if (($p['settings']['plan_mode'] ?? '') === $mode) {
@@ -699,6 +759,7 @@ function feature_summary(): array
         'wallet_topup' => feature_enabled('feature_wallet_topup_enabled'),
         'products' => feature_enabled('feature_product_shop_enabled'),
         'franchise' => feature_enabled('feature_franchise_enabled'),
+        'franchise_only' => feature_franchise_only(),
         'product_activates' => feature_enabled('feature_product_activates_package'),
         'product_only' => feature_product_only_activation(),
         'product_min_amount' => product_activate_min_amount(),
@@ -879,6 +940,13 @@ function feature_product_only_activation(): bool
     return feature_enabled('feature_product_only_activation')
         && feature_enabled('feature_product_activates_package')
         && feature_enabled('feature_product_shop_enabled');
+}
+
+/** True when install is configured for Franchise Only mode. */
+function feature_franchise_only(): bool
+{
+    return feature_enabled('feature_franchise_only', false)
+        || setting('feature_preset', '') === 'franchise_only';
 }
 
 /** Minimum product unit price required to activate (0 = any linked product). */

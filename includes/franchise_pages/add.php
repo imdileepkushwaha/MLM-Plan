@@ -40,6 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = trim($_POST['email'] ?? '');
     $aadhaarNo = trim($_POST['aadhaar_no'] ?? '');
     $panNo = strtoupper(trim($_POST['pan_no'] ?? ''));
+    $gstNo = strtoupper(trim($_POST['gst_no'] ?? ''));
     $address = trim($_POST['address'] ?? '');
     $city = trim($_POST['city'] ?? '');
     $state = trim($_POST['state'] ?? '');
@@ -103,10 +104,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $aadhaarFile = $existing['aadhaar_file'] ?? null;
     $panFile = $existing['pan_file'] ?? null;
     $photoFile = $existing['photo_file'] ?? null;
+    $gstFile = $existing['gst_file'] ?? null;
 
     $upA = franchise_store_doc($_FILES['aadhaar_file'] ?? [], 'aadhaar', $id);
     $upP = franchise_store_doc($_FILES['pan_file'] ?? [], 'pan', $id);
     $upPh = franchise_store_doc($_FILES['photo_file'] ?? [], 'photo', $id);
+    $upG = franchise_store_doc($_FILES['gst_file'] ?? [], 'gst', $id);
     if (!$upA['ok']) {
         $errors[] = $upA['error'] ?? 'Aadhaar upload failed.';
     } elseif (!empty($upA['path'])) {
@@ -122,12 +125,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif (!empty($upPh['path'])) {
         $photoFile = $upPh['path'];
     }
+    if (!$upG['ok']) {
+        $errors[] = $upG['error'] ?? 'GST document upload failed.';
+    } elseif (!empty($upG['path'])) {
+        $gstFile = $upG['path'];
+    }
 
     if (!$errors) {
         try {
             $dobVal = ($dob !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dob)) ? $dob : null;
             if ($id > 0) {
-                $sql = 'UPDATE franchisees SET type_id=?, sponsor_id=?, franchisee_code=?, name=?, contact_person=?, gender=?, dob=?, phone=?, email=?, aadhaar_no=?, pan_no=?, aadhaar_file=?, pan_file=?, photo_file=?, address=?, city=?, state=?, pincode=?, username=?, status=?';
+                $sql = 'UPDATE franchisees SET type_id=?, sponsor_id=?, franchisee_code=?, name=?, contact_person=?, gender=?, dob=?, phone=?, email=?, aadhaar_no=?, pan_no=?, gst_no=?, aadhaar_file=?, pan_file=?, photo_file=?, gst_file=?, address=?, city=?, state=?, pincode=?, username=?, status=?';
                 $params = [
                     $typeId, $sponsorId, $code, $name,
                     $contact !== '' ? $contact : null,
@@ -137,7 +145,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $email !== '' ? $email : null,
                     $aadhaarNo !== '' ? $aadhaarNo : null,
                     $panNo !== '' ? $panNo : null,
-                    $aadhaarFile, $panFile, $photoFile,
+                    $gstNo !== '' ? $gstNo : null,
+                    $aadhaarFile, $panFile, $photoFile, $gstFile,
                     $address !== '' ? $address : null,
                     $city !== '' ? $city : null,
                     $state !== '' ? $state : null,
@@ -159,9 +168,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->prepare('
                     INSERT INTO franchisees
                         (type_id, sponsor_id, franchisee_code, name, contact_person, gender, dob, phone, email,
-                         aadhaar_no, pan_no, aadhaar_file, pan_file, photo_file,
+                         aadhaar_no, pan_no, gst_no, aadhaar_file, pan_file, photo_file, gst_file,
                          address, city, state, pincode, username, password, status, created_by_role, created_by_id)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ')->execute([
                     $typeId, $sponsorId, $code, $name,
                     $contact !== '' ? $contact : null,
@@ -171,7 +180,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $email !== '' ? $email : null,
                     $aadhaarNo !== '' ? $aadhaarNo : null,
                     $panNo !== '' ? $panNo : null,
-                    $aadhaarFile, $panFile, $photoFile,
+                    $gstNo !== '' ? $gstNo : null,
+                    $aadhaarFile, $panFile, $photoFile, $gstFile,
                     $address !== '' ? $address : null,
                     $city !== '' ? $city : null,
                     $state !== '' ? $state : null,
@@ -206,9 +216,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'email' => $email,
         'aadhaar_no' => $aadhaarNo,
         'pan_no' => $panNo,
+        'gst_no' => $gstNo,
         'aadhaar_file' => $aadhaarFile,
         'pan_file' => $panFile,
         'photo_file' => $photoFile,
+        'gst_file' => $gstFile,
         'address' => $address,
         'city' => $city,
         'state' => $state,
@@ -366,6 +378,13 @@ franchise_header();
                             <input type="text" name="pan_no" value="<?= e($edit['pan_no'] ?? '') ?>" maxlength="10" placeholder="ABCDE1234F" style="text-transform:uppercase">
                         </div>
                     </div>
+                    <div class="form-group">
+                        <label>GST Number</label>
+                        <div class="fr-input-ico">
+                            <span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span>
+                            <input type="text" name="gst_no" value="<?= e($edit['gst_no'] ?? '') ?>" maxlength="20" placeholder="e.g. 22AAAAA0000A1Z5" style="text-transform:uppercase">
+                        </div>
+                    </div>
                 </div>
 
                 <div class="fr-doc-grid">
@@ -397,6 +416,15 @@ franchise_header();
                             'accept' => '.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp',
                             'file' => $edit['photo_file'] ?? null,
                             'photo' => true,
+                        ],
+                        [
+                            'key' => 'gst',
+                            'name' => 'gst_file',
+                            'title' => 'GST Certificate',
+                            'hint' => 'GST Registration / Certificate PDF or Image',
+                            'accept' => '.jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf',
+                            'file' => $edit['gst_file'] ?? null,
+                            'photo' => false,
                         ],
                     ];
                     foreach ($docCards as $card):

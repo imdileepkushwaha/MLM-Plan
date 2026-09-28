@@ -175,7 +175,7 @@ if ($flash && $flash['type'] === 'error' && (
         </form>
 
         <footer class="ulog-foot">
-            <p>New here? <a href="register.php">Create an account</a></p>
+            <p>New here? <a href="register.php">Create an account</a> &bull; <a href="../franchise/login.php">Franchise Login</a></p>
             <p class="ulog-copy">&copy; <?= date('Y') ?> <?= e($company) ?></p>
         </footer>
     </main>
