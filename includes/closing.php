@@ -379,33 +379,112 @@ function closing_rebuild_bv(PDO $pdo): array
 
 /**
  * Compute binary match for one member from current BV legs.
+ * Supports:
+ * - '1:1' (Standard 1:1 pair matching)
+ * - '2:1_then_1:1' (First pair requires 2:1 or 1:2; subsequent pairs are 1:1)
+ * - '2:1' (Always requires 2:1 or 1:2)
+ *
  * @return array{pairs:float,matched_bv:float,left_after:float,right_after:float,left_before:float,right_before:float}
  */
-function closing_compute_match(float $leftBv, float $rightBv, float $pairBv, int $flushPairs): array
-{
+function closing_compute_match(
+    float $leftBv,
+    float $rightBv,
+    float $pairBv,
+    int $flushPairs,
+    string $ratio = '1:1',
+    bool $hasPriorBinary = true
+): array {
     $leftBv = max(0.0, round($leftBv, 2));
     $rightBv = max(0.0, round($rightBv, 2));
     $pairBv = $pairBv > 0 ? $pairBv : 1.0;
 
-    $leftPairs = floor($leftBv / $pairBv + 1e-9);
-    $rightPairs = floor($rightBv / $pairBv + 1e-9);
-    $pairs = (float) min($leftPairs, $rightPairs);
+    $pairs = 0.0;
+    $matched = 0.0;
+    $deductLeft = 0.0;
+    $deductRight = 0.0;
 
-    if ($flushPairs > 0) {
-        $pairs = min($pairs, (float) $flushPairs);
+    $remLeft = $leftBv;
+    $remRight = $rightBv;
+
+    if ($ratio === '2:1_then_1:1' && !$hasPriorBinary) {
+        // First pair qualification requires either 2:1 or 1:2
+        $leftUnits = (int) floor($remLeft / $pairBv + 1e-9);
+        $rightUnits = (int) floor($remRight / $pairBv + 1e-9);
+
+        if (($leftUnits >= 2 && $rightUnits >= 1) || ($leftUnits >= 1 && $rightUnits >= 2)) {
+            $pairs += 1.0;
+            $matched += $pairBv;
+
+            if ($leftUnits >= $rightUnits) {
+                // 2 Left : 1 Right
+                $deductLeft += (2 * $pairBv);
+                $deductRight += (1 * $pairBv);
+                $remLeft = max(0.0, $remLeft - (2 * $pairBv));
+                $remRight = max(0.0, $remRight - (1 * $pairBv));
+            } else {
+                // 1 Left : 2 Right
+                $deductLeft += (1 * $pairBv);
+                $deductRight += (2 * $pairBv);
+                $remLeft = max(0.0, $remLeft - (1 * $pairBv));
+                $remRight = max(0.0, $remRight - (2 * $pairBv));
+            }
+
+            // Subsequent pairs in same run match at standard 1:1
+            $remLeftUnits = (int) floor($remLeft / $pairBv + 1e-9);
+            $remRightUnits = (int) floor($remRight / $pairBv + 1e-9);
+            $subsequentPairs = (float) min($remLeftUnits, $remRightUnits);
+
+            if ($subsequentPairs > 0) {
+                $pairs += $subsequentPairs;
+                $matched += ($subsequentPairs * $pairBv);
+                $deductLeft += ($subsequentPairs * $pairBv);
+                $deductRight += ($subsequentPairs * $pairBv);
+            }
+        }
+    } elseif ($ratio === '2:1') {
+        // Always 2:1 or 1:2
+        $leftUnits = (int) floor($remLeft / $pairBv + 1e-9);
+        $rightUnits = (int) floor($remRight / $pairBv + 1e-9);
+        while (($leftUnits >= 2 && $rightUnits >= 1) || ($leftUnits >= 1 && $rightUnits >= 2)) {
+            $pairs += 1.0;
+            $matched += $pairBv;
+            if ($leftUnits >= $rightUnits) {
+                $deductLeft += (2 * $pairBv);
+                $deductRight += (1 * $pairBv);
+                $leftUnits -= 2;
+                $rightUnits -= 1;
+            } else {
+                $deductLeft += (1 * $pairBv);
+                $deductRight += (2 * $pairBv);
+                $leftUnits -= 1;
+                $rightUnits -= 2;
+            }
+        }
+    } else {
+        // Standard 1:1
+        $leftUnits = (int) floor($remLeft / $pairBv + 1e-9);
+        $rightUnits = (int) floor($remRight / $pairBv + 1e-9);
+        $pairs = (float) min($leftUnits, $rightUnits);
+        $matched = round($pairs * $pairBv, 2);
+        $deductLeft = $matched;
+        $deductRight = $matched;
     }
 
-    $matched = round($pairs * $pairBv, 2);
-    $leftAfter = round($leftBv - $matched, 2);
-    $rightAfter = round($rightBv - $matched, 2);
+    if ($flushPairs > 0 && $pairs > $flushPairs) {
+        $pairs = (float) $flushPairs;
+        $matched = round($pairs * $pairBv, 2);
+    }
+
+    $leftAfter = round(max(0.0, $leftBv - $deductLeft), 2);
+    $rightAfter = round(max(0.0, $rightBv - $deductRight), 2);
 
     return [
         'pairs' => $pairs,
         'matched_bv' => $matched,
         'left_before' => $leftBv,
         'right_before' => $rightBv,
-        'left_after' => max(0.0, $leftAfter),
-        'right_after' => max(0.0, $rightAfter),
+        'left_after' => $leftAfter,
+        'right_after' => $rightAfter,
     ];
 }
 
@@ -493,11 +572,18 @@ function closing_run_binary(PDO $pdo, ?int $adminId = null, bool $commit = true)
         $updBv = $pdo->prepare('UPDATE members SET left_bv = ?, right_bv = ? WHERE id = ?');
         $insComm = $pdo->prepare('INSERT INTO commissions (member_id, from_member_id, type, amount, description, status) VALUES (?, ?, ?, ?, ?, ?)');
         $sponsorStmt = $pdo->prepare("SELECT id, status, package_id FROM members WHERE id = ? LIMIT 1");
+        $priorBinaryStmt = $pdo->prepare("SELECT 1 FROM commissions WHERE member_id = ? AND type = 'binary' AND status != 'rejected' LIMIT 1");
+        $ratio = (string) setting('binary_matching_ratio', '1:1');
 
         foreach ($rows as $m) {
             $processed++;
             $mid = (int) $m['id'];
-            $match = closing_compute_match((float) $m['left_bv'], (float) $m['right_bv'], $pairBv, $flushPairs);
+            $hasPrior = true;
+            if ($ratio === '2:1_then_1:1') {
+                $priorBinaryStmt->execute([$mid]);
+                $hasPrior = (bool) $priorBinaryStmt->fetchColumn();
+            }
+            $match = closing_compute_match((float) $m['left_bv'], (float) $m['right_bv'], $pairBv, $flushPairs, $ratio, $hasPrior);
 
             if ($match['matched_bv'] <= 0) {
                 continue;
@@ -698,9 +784,11 @@ function closing_open_pair_summary(PDO $pdo): array
     $pairBv = closing_pair_bv();
     $flush = max(0, (int) setting('binary_flush_pairs', '0'));
     $binaryPct = (float) setting('binary_commission_percent', '10');
+    $ratio = (string) setting('binary_matching_ratio', '1:1');
+    $priorBinaryStmt = $pdo->prepare("SELECT 1 FROM commissions WHERE member_id = ? AND type = 'binary' AND status != 'rejected' LIMIT 1");
 
     $rows = $pdo->query("
-        SELECT left_bv, right_bv FROM members
+        SELECT id, left_bv, right_bv FROM members
         WHERE status = 'active' AND package_id IS NOT NULL
     ")->fetchAll();
 
@@ -708,7 +796,12 @@ function closing_open_pair_summary(PDO $pdo): array
     $matched = 0.0;
     $eligible = 0;
     foreach ($rows as $r) {
-        $m = closing_compute_match((float) $r['left_bv'], (float) $r['right_bv'], $pairBv, $flush);
+        $hasPrior = true;
+        if ($ratio === '2:1_then_1:1') {
+            $priorBinaryStmt->execute([(int) $r['id']]);
+            $hasPrior = (bool) $priorBinaryStmt->fetchColumn();
+        }
+        $m = closing_compute_match((float) $r['left_bv'], (float) $r['right_bv'], $pairBv, $flush, $ratio, $hasPrior);
         if ($m['matched_bv'] > 0) {
             $eligible++;
             $pairs += $m['pairs'];

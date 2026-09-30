@@ -39,6 +39,7 @@ function feature_defaults(): array
         'feature_level_income' => '1',
         'feature_referral_income' => '1',
         'feature_matching_income' => '1',
+        'binary_matching_ratio' => '1:1',
 
         // Operational modules
         'feature_withdrawals_enabled' => '1',
@@ -1029,6 +1030,7 @@ function feature_audit_snapshot(PDO $pdo, ?array $keys = null): array
             'binary_flush_pairs',
             'binary_pair_bv',
             'daily_closing_admin_charge',
+            'binary_matching_ratio',
             'binary_income_enabled',
             'level_income_enabled',
             'level_income_levels',

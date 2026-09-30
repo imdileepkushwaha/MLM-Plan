@@ -16,7 +16,7 @@ $email = setting('contact_email', setting('support_email', ''));
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e($company) ?> — Opportunity · Network · Growth</title>
-    <meta name="description" content="<?= e($company) ?> — join our network marketing opportunity. Register, grow your team, and earn through binary, level, and referral income.">
+    <meta name="description" content="<?= e($company) ?> — join our network marketing opportunity. Register, grow your team, and earn through binary, level, and referral/direct income.">
     <?php if ($favUrl): ?><link rel="icon" href="<?= e($favUrl) ?>"><?php endif; ?>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -190,7 +190,7 @@ $email = setting('contact_email', setting('support_email', ''));
                         </div>
                         <div class="lp-journey-body">
                             <h3>Earn &amp; withdraw</h3>
-                            <p>Track binary, level, and referral income in your wallet — then request payout when ready.</p>
+                            <p>Track binary, level, and referral/direct income in your wallet — then request payout when ready.</p>
                             <a href="user/login.php" class="lp-journey-link">Go to member login →</a>
                         </div>
                     </li>

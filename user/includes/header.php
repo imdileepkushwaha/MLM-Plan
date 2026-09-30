@@ -321,7 +321,7 @@ $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="
                             <a href="income-binary.php" class="up-nav-sublink<?= $currentPage === 'income-binary' ? ' is-active' : '' ?>">Binary Income</a>
                             <?php endif; ?>
                             <?php if ($featIncomeReferral): ?>
-                            <a href="income-referral.php" class="up-nav-sublink<?= $currentPage === 'income-referral' ? ' is-active' : '' ?>">Referral Income</a>
+                            <a href="income-referral.php" class="up-nav-sublink<?= $currentPage === 'income-referral' ? ' is-active' : '' ?>">Referral/Direct Income</a>
                             <?php endif; ?>
                             <?php if ($featIncomeMatching): ?>
                             <a href="income-matching.php" class="up-nav-sublink<?= $currentPage === 'income-matching' ? ' is-active' : '' ?>">Matching Income</a>
@@ -468,7 +468,7 @@ $chevron = '<svg class="up-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="
                     <a href="income-binary.php" data-search="binary income">Binary Income</a>
                     <?php endif; ?>
                     <?php if ($featIncomeReferral): ?>
-                    <a href="income-referral.php" data-search="referral income">Referral Income</a>
+                    <a href="income-referral.php" data-search="referral direct income">Referral/Direct Income</a>
                     <?php endif; ?>
                     <?php if ($featIncomeMatching): ?>
                     <a href="income-matching.php" data-search="matching income">Matching Income</a>

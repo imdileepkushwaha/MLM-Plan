@@ -17,7 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $before = feature_audit_snapshot($pdo);
 
     if ($postSub === 'binary') {
-        foreach (['binary_commission_percent', 'referral_commission_percent', 'matching_commission_percent', 'binary_flush_pairs', 'binary_pair_bv', 'daily_closing_admin_charge'] as $key) {
+        foreach (['binary_commission_percent', 'referral_commission_percent', 'matching_commission_percent', 'binary_flush_pairs', 'binary_pair_bv', 'daily_closing_admin_charge', 'binary_matching_ratio'] as $key) {
             if (isset($_POST[$key])) {
                 $saveSetting($pdo, $key, trim((string) $_POST[$key]));
             }
@@ -58,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($postSub === 'binary') {
         $auditKeys = [
             'binary_commission_percent', 'referral_commission_percent', 'matching_commission_percent',
-            'binary_flush_pairs', 'binary_pair_bv', 'daily_closing_admin_charge',
+            'binary_flush_pairs', 'binary_pair_bv', 'daily_closing_admin_charge', 'binary_matching_ratio',
             'binary_income_enabled', 'feature_binary_income', 'feature_matching_income',
         ];
     } else {
@@ -134,6 +134,15 @@ $levelCount = max(1, min(20, (int) ($settings['level_income_levels'] ?? 10)));
             <div class="form-group">
                 <label>Pair BV</label>
                 <input type="number" step="0.01" min="0" name="binary_pair_bv" value="<?= e($settings['binary_pair_bv'] ?? '1000') ?>">
+            </div>
+            <div class="form-group">
+                <label>Binary Matching Ratio</label>
+                <select name="binary_matching_ratio">
+                    <option value="1:1" <?= ($settings['binary_matching_ratio'] ?? '1:1') === '1:1' ? 'selected' : '' ?>>1:1 (Always 1:1)</option>
+                    <option value="2:1_then_1:1" <?= ($settings['binary_matching_ratio'] ?? '1:1') === '2:1_then_1:1' ? 'selected' : '' ?>>First Pair 2:1 or 1:2, then 1:1</option>
+                    <option value="2:1" <?= ($settings['binary_matching_ratio'] ?? '1:1') === '2:1' ? 'selected' : '' ?>>2:1 or 1:2 (Always)</option>
+                </select>
+                <span class="sa-field-hint">Initial vs ongoing qualification pair ratio</span>
             </div>
             <div class="form-group">
                 <label>Flush pairs (0 = no)</label>

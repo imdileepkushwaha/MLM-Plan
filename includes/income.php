@@ -18,8 +18,8 @@ function income_types_catalog(): array
         ],
         'referral' => [
             'key' => 'referral',
-            'label' => 'Referral Income',
-            'short' => 'Referral',
+            'label' => 'Referral/Direct Income',
+            'short' => 'Referral/Direct',
             'file' => 'income-referral.php',
             'kicker' => 'Direct sponsor',
             'desc' => 'Bonus credited when your direct members activate a package.',

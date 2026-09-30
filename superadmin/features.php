@@ -286,7 +286,7 @@ $switch = static function (string $name, string $label, string $hint, bool $on, 
         <div class="sa-switch-grid">
             <?= $switch('feature_binary_income', 'Binary income', 'Pair matching / binary closing payouts', feature_enabled('feature_binary_income')) ?>
             <?= $switch('feature_level_income', 'Level income', 'Sponsor-level % on activations', feature_enabled('feature_level_income')) ?>
-            <?= $switch('feature_referral_income', 'Referral income', 'Direct sponsor bonus on activation', feature_enabled('feature_referral_income')) ?>
+            <?= $switch('feature_referral_income', 'Referral/Direct income', 'Direct sponsor bonus on activation', feature_enabled('feature_referral_income')) ?>
             <?= $switch('feature_matching_income', 'Matching income', 'Matching bonus on downline earnings', feature_enabled('feature_matching_income')) ?>
         </div>
 

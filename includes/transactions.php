@@ -10,7 +10,7 @@ function txn_type_label(string $source, string $type): string
     }
     $map = [
         'binary' => 'Binary Income',
-        'referral' => 'Referral Income',
+        'referral' => 'Referral/Direct Income',
         'matching' => 'Matching Income',
         'level' => 'Level Income',
         'other' => 'Other Income',

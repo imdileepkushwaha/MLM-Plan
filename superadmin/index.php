@@ -15,7 +15,7 @@ $modeLabel = [
 $modules = [
     ['Binary income / tree', $s['binary']],
     ['Level income', $s['level']],
-    ['Referral income', $s['referral']],
+    ['Referral/Direct income', $s['referral']],
     ['Matching income', $s['matching']],
     ['Packages', $s['package']],
     ['T-PIN', $s['tpin']],
